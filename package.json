@@ -13,7 +13,15 @@
   "bugs": {
     "url": "https://github.com/McMarius11/lodestar/issues"
   },
-  "keywords": ["project-management", "electron", "react", "typescript", "local-first", "gantt", "kanban"],
+  "keywords": [
+    "project-management",
+    "electron",
+    "react",
+    "typescript",
+    "local-first",
+    "gantt",
+    "kanban"
+  ],
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
@@ -21,8 +29,9 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
     "electron:dev": "vite",
-    "electron:build": "vite build && electron-builder",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "electron:build": "npm run notices && vite build && electron-builder",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "notices": "node scripts/generate-notices.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -42,6 +51,7 @@
     "autoprefixer": "^10.4.20",
     "electron": "^33.0.2",
     "electron-builder": "^25.1.8",
+    "license-checker-rseidelsohn": "^4.4.2",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
@@ -52,10 +62,26 @@
   "build": {
     "appId": "com.lodestar.app",
     "productName": "Lodestar",
-    "files": ["dist", "dist-electron"],
-    "directories": { "output": "release" },
-    "linux": { "target": ["AppImage"] },
-    "win": { "target": ["nsis"] },
-    "mac": { "target": ["dmg"] }
+    "artifactName": "Lodestar-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "dist",
+      "dist-electron"
+    ],
+    "extraResources": [
+      { "from": "THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md" },
+      { "from": "LICENSE", "to": "LICENSE" },
+      { "from": "src/assets/fonts/geist/OFL.txt", "to": "fonts/Geist-OFL.txt" },
+      { "from": "src/assets/fonts/instrument-serif/OFL.txt", "to": "fonts/InstrumentSerif-OFL.txt" }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office"
+    },
+    "win": {
+      "target": [{ "target": "portable", "arch": ["x64"] }]
+    }
   }
 }
