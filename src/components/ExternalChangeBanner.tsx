@@ -7,7 +7,12 @@ export function ExternalChangeBanner() {
 
   if (!pending) return null
   return (
-    <div className="border-b border-warn/40 bg-warn/10 px-5 py-2 flex items-center gap-4 label-mono">
+    <div
+      role="alert"
+      aria-live="assertive"
+      data-testid="banner-external-change"
+      className="border-b border-warn/40 bg-warn/10 px-5 py-2 flex items-center gap-4 label-mono"
+    >
       <span className="text-warn">⚠ FILE CHANGED ON DISK</span>
       <span className="text-fg-subtle normal-case">
         Something else (editor, Claude, git) rewrote project.json while you were editing.
@@ -15,6 +20,7 @@ export function ExternalChangeBanner() {
       <div className="ml-auto flex gap-2">
         <button
           onClick={() => reload()}
+          data-testid="banner-external-reload"
           className="btn-ghost !py-1 !px-2 text-xs"
           title="Discard your in-progress edits and load disk state"
         >
@@ -22,6 +28,7 @@ export function ExternalChangeBanner() {
         </button>
         <button
           onClick={() => dismiss()}
+          data-testid="banner-external-keep"
           className="btn-primary !py-1 !px-2 text-xs"
           title="Keep your edits and overwrite the disk state"
         >

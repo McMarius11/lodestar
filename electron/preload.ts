@@ -9,9 +9,10 @@ export type SaveResult =
   | { ok: false; error: string }
 
 contextBridge.exposeInMainWorld('projectAPI', {
-  load: (): Promise<LoadResult> => ipcRenderer.invoke('project:load'),
-  save: (payload: unknown): Promise<SaveResult> =>
-    ipcRenderer.invoke('project:save', payload),
+  load: (filePath?: string): Promise<LoadResult> =>
+    ipcRenderer.invoke('project:load', filePath),
+  save: (payload: unknown, filePath?: string): Promise<SaveResult> =>
+    ipcRenderer.invoke('project:save', payload, filePath),
   exportTo: (payload: unknown): Promise<SaveResult> =>
     ipcRenderer.invoke('project:export', payload),
   importFrom: (): Promise<LoadResult> => ipcRenderer.invoke('project:import'),
@@ -35,8 +36,8 @@ contextBridge.exposeInMainWorld('projectAPI', {
 declare global {
   interface Window {
     projectAPI: {
-      load: () => Promise<LoadResult>
-      save: (payload: unknown) => Promise<SaveResult>
+      load: (filePath?: string) => Promise<LoadResult>
+      save: (payload: unknown, filePath?: string) => Promise<SaveResult>
       exportTo: (payload: unknown) => Promise<SaveResult>
       importFrom: () => Promise<LoadResult>
       openPath: (filePath: string) => Promise<LoadResult>

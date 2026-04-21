@@ -281,7 +281,13 @@ export function MindMap() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div
+      className="h-full flex flex-col"
+      role="tabpanel"
+      id="view-mindmap"
+      aria-label="Mind Map"
+      data-testid="view-mindmap"
+    >
       <div className="px-8 pt-8 pb-4 border-b border-line/40">
         <div className="label-mono mb-3">
           <span className="num-mono">04</span> · MIND MAP
@@ -291,6 +297,11 @@ export function MindMap() {
 
       <div
         className="flex-1 min-h-0 grain relative overflow-hidden"
+        data-testid="mindmap-canvas"
+        data-mindmap-zoom={scale.toFixed(3)}
+        data-mindmap-pan-x={tx.toFixed(1)}
+        data-mindmap-pan-y={ty.toFixed(1)}
+        data-mindmap-panning={panning ? 'true' : 'false'}
         onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -311,6 +322,8 @@ export function MindMap() {
           viewBox={`0 0 ${W} ${H}`}
           className="w-full h-full select-none"
           preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label="Mind map constellation"
         >
           <g transform={`translate(${tx} ${ty}) scale(${scale})`}>
           <defs>
@@ -442,7 +455,11 @@ export function MindMap() {
 
           {/* module nodes */}
           {layout.map((mp) => (
-            <g key={`mod-${mp.mod.id}`}>
+            <g
+              key={`mod-${mp.mod.id}`}
+              data-module-id={mp.mod.id}
+              data-mindmap-module={mp.mod.id}
+            >
               <circle
                 cx={mp.center.x}
                 cy={mp.center.y}
@@ -490,6 +507,10 @@ export function MindMap() {
               return (
                 <g
                   key={`feat-${fp.feat.id}`}
+                  data-feature-id={fp.feat.id}
+                  data-mindmap-node={fp.feat.id}
+                  data-mindmap-x={p.x.toFixed(1)}
+                  data-mindmap-y={p.y.toFixed(1)}
                   onMouseEnter={() => setHover(fp.feat.id)}
                   onMouseLeave={() => setHover(null)}
                   onPointerDown={(e) => {

@@ -135,6 +135,8 @@ function ContextMenuPortal({
     <div
       ref={ref}
       role="menu"
+      aria-label={isSubmenu ? 'Submenu' : 'Context menu'}
+      data-testid={isSubmenu ? 'context-submenu' : 'context-menu'}
       className={clsx(
         'fixed z-[1000] bg-base border border-line-strong/70 shadow-2xl',
         'py-1 min-w-[var(--ctx-w)] text-fg',
@@ -164,6 +166,11 @@ function ContextMenuPortal({
             <button
               key={i}
               type="button"
+              role="menuitem"
+              aria-haspopup="menu"
+              aria-expanded={isOpen}
+              aria-disabled={it.disabled || undefined}
+              data-testid={`menuitem-submenu-${slugLabel(it.label)}`}
               disabled={it.disabled}
               onMouseEnter={(e) => {
                 if (it.disabled) return
@@ -205,6 +212,9 @@ function ContextMenuPortal({
           <button
             key={i}
             type="button"
+            role="menuitem"
+            aria-disabled={it.disabled || undefined}
+            data-testid={`menuitem-${slugLabel(it.label)}`}
             disabled={it.disabled}
             onMouseEnter={() => setActive(i)}
             onClick={() => triggerItem(it)}
@@ -231,6 +241,14 @@ function ContextMenuPortal({
     </div>,
     document.body,
   )
+}
+
+function slugLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48)
 }
 
 function firstEnabled(items: CtxMenuItem[], from: number, dir: 1 | -1): number {

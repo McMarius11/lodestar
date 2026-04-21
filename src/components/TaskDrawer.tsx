@@ -47,6 +47,11 @@ export function TaskDrawer() {
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 260 }}
             className="fixed bottom-0 left-0 right-0 z-50 max-h-[70vh] bg-base border-t border-line-strong/60"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="drawer-title"
+            data-testid="dialog-task"
+            data-drawer-feature={id}
           >
             <DrawerBody id={id} onClose={() => close(null)} />
           </motion.div>
@@ -108,8 +113,11 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
             </span>
           </div>
           <input
+            id="drawer-title"
             value={feat.label}
             onChange={(e) => updateFeature(feat.id, { label: e.target.value })}
+            aria-label="Feature label"
+            data-testid="drawer-feature-label"
             className="ser-display text-3xl text-fg w-full outline-none bg-transparent"
           />
           <DescriptionField

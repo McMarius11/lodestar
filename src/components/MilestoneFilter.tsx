@@ -7,7 +7,11 @@ export function MilestoneFilter() {
   const set = useProjectStore((s) => s.setActiveMilestone)
 
   return (
-    <div className="flex items-stretch border border-line/60">
+    <div
+      className="flex items-stretch border border-line/60"
+      role="group"
+      aria-label="Milestone filter"
+    >
       <button
         onClick={() => set('all')}
         className={clsx(
@@ -16,6 +20,9 @@ export function MilestoneFilter() {
             ? 'bg-fg text-void'
             : 'text-fg-muted hover:text-fg hover:bg-raised/50',
         )}
+        aria-pressed={active === 'all'}
+        aria-label="Filter: All milestones"
+        data-testid="filter-ms-all"
       >
         All
       </button>
@@ -31,6 +38,9 @@ export function MilestoneFilter() {
               : 'text-fg-muted hover:text-fg hover:bg-raised/50',
           )}
           title={ms.label}
+          aria-pressed={active === ms.id}
+          aria-label={`Filter: ${ms.label}`}
+          data-testid={`filter-ms-${ms.id}`}
         >
           <span className="num-mono">{ms.id}</span>
         </button>

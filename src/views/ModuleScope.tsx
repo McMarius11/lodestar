@@ -70,6 +70,10 @@ export function ModuleScope() {
   return (
     <div
       className="h-full overflow-auto scroll-thin"
+      role="tabpanel"
+      id="view-scope"
+      aria-label="Module Scope"
+      data-testid="view-scope"
       onContextMenu={(e) => {
         if (e.target !== e.currentTarget) return
         e.preventDefault()
@@ -231,6 +235,7 @@ function ModuleCard({
 
   return (
     <div
+      data-module-id={module.id}
       onDragEnter={onDragEnter}
       onDragOver={(e) => {
         if (dragOver || dragging) e.preventDefault()
@@ -317,6 +322,7 @@ function ModuleCard({
           return (
             <li
               key={f.id}
+              data-feature-id={f.id}
               draggable
               onDragStart={(e) => {
                 e.stopPropagation()

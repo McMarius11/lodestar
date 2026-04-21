@@ -72,10 +72,16 @@ export function ModuleEditor({
         style={{ left, top }}
         className="fixed z-[60] w-[300px] bg-base border border-line-strong/60 shadow-xl"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mod-editor-title"
+        data-testid="dialog-module"
+        data-module-id={module.id}
       >
         <div className="px-4 pt-4 pb-3 border-b border-line/60">
           <div className="label-mono mb-2">MODULE · {module.id}</div>
           <input
+            id="mod-editor-title"
             autoFocus
             value={label}
             onChange={(e) => setLabel(e.target.value)}
@@ -86,6 +92,8 @@ export function ModuleEditor({
                 onClose()
               }
             }}
+            aria-label="Module label"
+            data-testid="module-editor-label"
             className="w-full bg-transparent outline-none ser-display italic text-2xl border-b border-line/60 focus:border-accent transition-colors pb-1"
           />
         </div>
