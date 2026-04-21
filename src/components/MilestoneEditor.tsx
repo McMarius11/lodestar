@@ -61,6 +61,7 @@ export function MilestoneEditor({ onClose }: { onClose: () => void }) {
       <div
         className="fixed inset-0 z-[70] flex items-center justify-center bg-void/70 backdrop-blur-sm"
         onClick={onClose}
+        data-testid="dialog-milestone-backdrop"
       >
         <motion.div
           ref={ref}
@@ -70,11 +71,15 @@ export function MilestoneEditor({ onClose }: { onClose: () => void }) {
           transition={{ duration: 0.15 }}
           className="w-[min(560px,calc(100%-2rem))] bg-base border border-line-strong/60 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ms-editor-title"
+          data-testid="dialog-milestone"
         >
           <div className="px-5 py-4 border-b border-line/60 flex items-baseline justify-between">
             <div>
               <div className="label-mono mb-0.5">MILESTONES</div>
-              <div className="ser-display italic text-2xl">Roadmap anchors</div>
+              <div id="ms-editor-title" className="ser-display italic text-2xl">Roadmap anchors</div>
             </div>
             <button onClick={onClose} className="label-mono text-fg-subtle hover:text-fg">
               CLOSE · ESC
@@ -154,7 +159,11 @@ function MilestoneRow({
   }
 
   return (
-    <div className="flex items-center gap-2 py-1 hover:bg-raised/40 -mx-2 px-2">
+    <div
+      className="flex items-center gap-2 py-1 hover:bg-raised/40 -mx-2 px-2"
+      data-testid={`milestone-row-${id}`}
+      data-milestone-id={id}
+    >
       <input
         value={editId}
         onChange={(e) => setEditId(e.target.value)}

@@ -45,7 +45,13 @@ export function Roadmap() {
   }
 
   return (
-    <div className="h-full overflow-auto scroll-thin">
+    <div
+      className="h-full overflow-auto scroll-thin"
+      role="tabpanel"
+      id="view-roadmap"
+      aria-label="Roadmap"
+      data-testid="view-roadmap"
+    >
       <div
         onContextMenu={(e) => {
           e.preventDefault()
@@ -69,6 +75,8 @@ export function Roadmap() {
           return (
             <div
               key={ms.id}
+              data-milestone-id={ms.id}
+              data-testid={`roadmap-col-${ms.id}`}
               onDragOver={(e) => {
                 if (!dragId) return
                 e.preventDefault()
@@ -137,6 +145,7 @@ export function Roadmap() {
                   return (
                     <button
                       key={f.id}
+                      data-feature-id={f.id}
                       draggable
                       onDragStart={(e) => {
                         e.dataTransfer.effectAllowed = 'move'

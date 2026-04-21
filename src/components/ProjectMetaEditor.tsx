@@ -42,6 +42,7 @@ export function ProjectMetaEditor({ onClose }: { onClose: () => void }) {
       <div
         className="fixed inset-0 z-[70] flex items-center justify-center bg-void/70 backdrop-blur-sm"
         onClick={onClose}
+        data-testid="dialog-project-meta-backdrop"
       >
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -50,11 +51,15 @@ export function ProjectMetaEditor({ onClose }: { onClose: () => void }) {
           transition={{ duration: 0.15 }}
           className="w-[min(640px,calc(100%-2rem))] bg-base border border-line-strong/60 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="meta-editor-title"
+          data-testid="dialog-project-meta"
         >
           <div className="px-5 py-4 border-b border-line/60 flex items-baseline justify-between">
             <div>
               <div className="label-mono mb-0.5">PROJECT META</div>
-              <div className="ser-display italic text-2xl">{name || 'Untitled'}</div>
+              <div id="meta-editor-title" className="ser-display italic text-2xl">{name || 'Untitled'}</div>
             </div>
             <button onClick={onClose} className="label-mono text-fg-subtle hover:text-fg">
               CLOSE · ESC

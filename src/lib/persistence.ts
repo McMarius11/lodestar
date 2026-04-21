@@ -4,20 +4,38 @@ import { migrate } from '@/schema'
 const LS_KEY = 'projekt-planner:project:v1'
 
 export type LoadedProject =
-  | { project: Project; source: 'disk' | 'localStorage'; status: 'ok' }
+  | { project: Project; source: 'disk' | 'localStorage'; status: 'ok'; path?: string }
   | { project: null; source: 'none'; status: 'empty' }
-  | { project: Project; source: 'disk' | 'localStorage'; status: 'corrupt'; error: string }
+  | {
+      project: Project
+      source: 'disk' | 'localStorage'
+      status: 'corrupt'
+      error: string
+    }
 
 function hasElectron(): boolean {
   return typeof window !== 'undefined' && typeof window.projectAPI !== 'undefined'
 }
 
+/**
+ * Default-location load: the app's canonical slot.
+ * - Electron dev: <repo>/data/project.json
+ * - Electron packaged: <userData>/data/project.json
+ * - Browser: localStorage[LS_KEY]
+ *
+ * Returns `source: 'none'` if nothing is there yet.
+ */
 export async function loadProject(): Promise<LoadedProject> {
   if (hasElectron()) {
     const res = await window.projectAPI.load()
     if (res.ok) {
       try {
-        return { project: migrate(res.data), source: 'disk', status: 'ok' }
+        return {
+          project: migrate(res.data),
+          source: 'disk',
+          status: 'ok',
+          path: res.path,
+        }
       } catch (err) {
         return {
           project: null as unknown as Project,
@@ -38,9 +56,44 @@ export async function loadProject(): Promise<LoadedProject> {
   return { project: null, source: 'none', status: 'empty' }
 }
 
-export async function saveProject(project: Project): Promise<void> {
+/**
+ * Electron-only. Load a project from an arbitrary filesystem path.
+ * In the browser this has no meaning — callers should guard with
+ * hasElectron() or use loadProject() instead.
+ */
+export async function loadProjectFromPath(path: string): Promise<LoadedProject> {
+  if (!hasElectron()) return { project: null, source: 'none', status: 'empty' }
+  const res = await window.projectAPI.load(path)
+  if (!res.ok) return { project: null, source: 'none', status: 'empty' }
+  try {
+    return {
+      project: migrate(res.data),
+      source: 'disk',
+      status: 'ok',
+      path: res.path ?? path,
+    }
+  } catch (err) {
+    return {
+      project: null as unknown as Project,
+      source: 'disk',
+      status: 'corrupt',
+      error: String(err),
+    } as LoadedProject
+  }
+}
+
+/**
+ * Save a project.
+ *   - Electron + explicit path: writes there, watcher latches onto the path.
+ *   - Electron + no path: writes to the default data/project.json slot.
+ *   - Browser: writes to localStorage.
+ */
+export async function saveProject(
+  project: Project,
+  path?: string,
+): Promise<void> {
   if (hasElectron()) {
-    await window.projectAPI.save(project)
+    await window.projectAPI.save(project, path)
     return
   }
   localStorage.setItem(LS_KEY, JSON.stringify(project))
@@ -61,10 +114,13 @@ export async function exportProject(project: Project): Promise<string | null> {
   return 'download'
 }
 
-export async function importProject(): Promise<Project | null> {
+export type ImportedProject = { project: Project; path?: string }
+
+export async function importProject(): Promise<ImportedProject | null> {
   if (hasElectron()) {
     const res = await window.projectAPI.importFrom()
-    return res.ok ? migrate(res.data) : null
+    if (!res.ok) return null
+    return { project: migrate(res.data), path: res.path }
   }
   return new Promise((resolve) => {
     const input = document.createElement('input')
@@ -75,7 +131,7 @@ export async function importProject(): Promise<Project | null> {
       if (!file) return resolve(null)
       const text = await file.text()
       try {
-        resolve(migrate(JSON.parse(text)))
+        resolve({ project: migrate(JSON.parse(text)) })
       } catch {
         resolve(null)
       }

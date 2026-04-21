@@ -75,7 +75,11 @@ export function DepEditorPopover({
     <div
       ref={ref}
       role="dialog"
+      aria-modal="true"
       aria-label="Add dependency"
+      data-testid="dialog-dep-editor"
+      data-dep-from={fromFeature.id}
+      data-dep-to={toFeature.id}
       className="fixed z-[1000] bg-base border border-line-strong/70 shadow-2xl w-[300px] p-3"
       style={{ left: x, top: y }}
     >

@@ -248,6 +248,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         transition={{ duration: 0.12 }}
         className="fixed inset-0 bg-sunken z-50"
         onClick={onClose}
+        data-testid="dialog-command-palette-backdrop"
       />
       <motion.div
         initial={{ opacity: 0, y: -8, scale: 0.98 }}
@@ -255,6 +256,10 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         exit={{ opacity: 0, y: -8, scale: 0.98 }}
         transition={{ duration: 0.14 }}
         className="fixed z-50 left-1/2 -translate-x-1/2 top-[12vh] w-[640px] max-w-[90vw] bg-base border border-line-strong/60"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        data-testid="dialog-command-palette"
       >
         <div className="flex items-center gap-3 px-5 py-4 border-b border-line/60">
           <span className="label-mono text-fg-subtle">▸</span>
@@ -278,19 +283,36 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
               }
             }}
             placeholder="Type a command or feature…"
+            role="combobox"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-controls="command-palette-list"
+            aria-activedescendant={filtered[sel] ? `cmd-${filtered[sel].id}` : undefined}
+            aria-label="Command search"
+            data-testid="command-palette-input"
             className="flex-1 text-base outline-none placeholder:text-fg-subtle"
           />
           <span className="label-mono text-fg-subtle">ESC</span>
         </div>
-        <div className="max-h-[60vh] overflow-auto scroll-thin">
+        <div
+          id="command-palette-list"
+          role="listbox"
+          aria-label="Commands"
+          className="max-h-[60vh] overflow-auto scroll-thin"
+        >
           {filtered.length === 0 && (
-            <div className="px-5 py-8 text-center label-mono text-fg-subtle">
+            <div className="px-5 py-8 text-center label-mono text-fg-subtle" data-testid="command-palette-empty">
               NO MATCHES
             </div>
           )}
           {filtered.map((c, i) => (
             <button
               key={c.id}
+              id={`cmd-${c.id}`}
+              role="option"
+              aria-selected={i === sel}
+              data-testid={`command-${c.id}`}
+              data-command-group={c.group}
               onMouseEnter={() => setSel(i)}
               onClick={() => run(c)}
               className={clsx(

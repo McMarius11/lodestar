@@ -48,7 +48,12 @@ src/
     deps.ts              ← featureStatus, isBlocked, hasConflict, findFeature,
                            featureIndex, moduleOf, matchesFilters, cycles
     featureActions.ts    ← pure factory: Api → CtxMenuItem[] for all menus
-    persistence.ts       ← load/save (Electron IPC or localStorage fallback)
+    persistence.ts       ← load/save (Electron IPC or localStorage fallback);
+                            loadProjectFromPath + saveProject(project, path?)
+                            for arbitrary-file support
+    recentFiles.ts       ← Recent-files list (localStorage) — pure transforms
+                            (upsertRecent/removeRecent) + tiny I/O wrappers
+    lastSession.ts       ← remembers last opened path for "Continue" button
     validate.ts          ← lint rules for the Validation panel
     markdown.ts          ← tiny markdown → HTML for feature descriptions
     id.ts                ← nanoid wrappers (newId, slugId)
@@ -141,11 +146,25 @@ Filters, drawer state, palette-open, zoom factors do NOT participate in undo.
 - `schema.ts:migrate(raw)` — every load and save goes through this. It walks
   `schemaVersion` up to `CURRENT_SCHEMA_VERSION` and then Zod-validates.
   Adding a schema change = bump the constant, add a migration case.
-- `persistence.ts:loadProject()` returns `{ source: 'disk' | 'localStorage' |
-  'sample' | 'none' }`. The store's `init()` calls this on mount.
+- `persistence.ts` exposes two load paths: `loadProject()` reads the canonical
+  default slot (`data/project.json` dev / `userData` packaged / `localStorage`
+  browser); `loadProjectFromPath(path)` is Electron-only and opens an arbitrary
+  file. `saveProject(project, path?)` routes to the same place — optional path
+  overrides the default slot.
+- `store.init()` no longer auto-loads. It sets `source: 'none'` so the
+  `WelcomeScreen` always shows at startup. The user picks a file there; that
+  action populates `currentPath` and hands it to future saves.
+- `lib/recentFiles.ts` + `lib/lastSession.ts` are the persistent memory behind
+  the Welcome screen. They're pure-ish (localStorage I/O is behind a small
+  wrapper, list transforms are pure and tested). Only store actions are
+  allowed to *write* to them — UI components just call `store.recents()` /
+  `store.lastSession()` to read, or `store.forgetRecent(...)` to prune.
 - `persistence.ts:subscribeExternalChange()` wires the file watcher (Electron)
-  so external edits reload the UI. If a drawer is open, reload is deferred
-  (`externalChangePending`) and the user decides when to pull.
+  so external edits reload the UI. The watcher latches onto whichever path
+  the last load/save touched — so a project opened at `~/foo/x.json` is
+  watched at `~/foo/x.json`, not at the default slot. If a drawer is open,
+  reload is deferred (`externalChangePending`) and the user decides when to
+  pull.
 
 ---
 

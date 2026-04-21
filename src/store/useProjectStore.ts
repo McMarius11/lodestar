@@ -6,6 +6,7 @@ import {
   importProject,
   importProjectFromText,
   loadProject,
+  loadProjectFromPath,
   saveProject,
   subscribeExternalChange,
 } from '@/lib/persistence'
@@ -14,6 +15,19 @@ import { sampleProject } from '@/data/sample'
 import { lodestarRoadmap } from '@/data/lodestarRoadmap'
 import { newId, slugId } from '@/lib/id'
 import { featureStatus, findFeature, moduleOf } from '@/lib/deps'
+import {
+  loadRecents,
+  saveRecents,
+  upsertRecent,
+  removeRecent,
+  type Recent,
+} from '@/lib/recentFiles'
+import {
+  clearLastSession,
+  loadLastSession,
+  saveLastSession,
+  type LastSession,
+} from '@/lib/lastSession'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -23,6 +37,13 @@ type State = {
   project: Project
   loaded: boolean
   source: 'disk' | 'localStorage' | 'sample' | 'none' | null
+  /**
+   * Filesystem path of the currently-open project (Electron only).
+   * `null` means "no specific file" — saves go to the canonical default slot
+   * (data/project.json in dev, userData/data/project.json packaged) or to
+   * localStorage in the browser build.
+   */
+  currentPath: string | null
   externalChangePending: boolean
   activeView: ViewId
   activeMilestone: string | 'all'
@@ -47,6 +68,10 @@ type State = {
 
 type Actions = {
   init: () => Promise<void>
+  openLastSession: () => Promise<boolean>
+  openProjectFromPath: (path: string) => Promise<boolean>
+  openProjectFromDialog: () => Promise<boolean>
+  openProjectFromText: (text: string, opts?: { name?: string; path?: string }) => boolean
   setActiveView: (v: ViewId) => void
   setActiveMilestone: (ms: string | 'all') => void
   setActiveStatus: (s: StatusFilter) => void
@@ -104,12 +129,15 @@ type Actions = {
 
   exportFile: () => Promise<void>
   importFile: () => Promise<void>
-  importFromText: (text: string) => boolean
   loadSample: () => void
   loadLodestarRoadmap: () => void
   startEmptyProject: (name: string) => void
   reloadFromDisk: () => Promise<void>
   dismissExternalChange: () => void
+
+  recents: () => Recent[]
+  forgetRecent: (predicate: (r: Recent) => boolean) => void
+  lastSession: () => LastSession | null
 
   _pushHistory: () => void
   _persist: () => void
@@ -117,6 +145,41 @@ type Actions = {
 
 const HISTORY_LIMIT = 50
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+function basenameOf(p: string): string {
+  const parts = p.split(/[/\\]/)
+  return parts[parts.length - 1] || p
+}
+
+/**
+ * A project at `path` just became active. Update the recent-files list and
+ * the last-session pointer so the Welcome screen can offer "Continue" next
+ * boot. Called by every action that opens a named file.
+ */
+function rememberOpened(path: string): void {
+  const now = Date.now()
+  saveLastSession({ path, when: now })
+  saveRecents(
+    upsertRecent(loadRecents(), {
+      name: basenameOf(path),
+      path,
+      when: now,
+    }),
+  )
+}
+
+/**
+ * Browser-mode / pathless opens: the project lives in the default slot.
+ * Still worth leaving a breadcrumb so the Welcome screen can offer Continue
+ * on the next visit, and the recent-files list gets a named entry.
+ */
+function markDefaultSlotOpened(name?: string): void {
+  const now = Date.now()
+  saveLastSession({ path: null, when: now })
+  if (name) {
+    saveRecents(upsertRecent(loadRecents(), { name, when: now }))
+  }
+}
 
 export const useProjectStore = create<State & Actions>()(
   immer((set, get) => {
@@ -141,6 +204,7 @@ export const useProjectStore = create<State & Actions>()(
     },
     loaded: false,
     source: null,
+    currentPath: null,
     externalChangePending: false,
     activeView: 'scope',
     activeMilestone: 'all',
@@ -158,16 +222,16 @@ export const useProjectStore = create<State & Actions>()(
     mindmapOverrides: {},
     depEditor: null,
 
+    /**
+     * Boot-time setup only. We intentionally do NOT auto-load a project —
+     * the Welcome screen lets the user decide which file to open. External
+     * change subscription is wired once here; the watcher inside electron
+     * main.ts latches onto whichever path the next load/save operates on.
+     */
     init: async () => {
-      const loaded = await loadProject()
       set((s) => {
-        if (loaded.status === 'ok') {
-          s.project = loaded.project
-          s.source = loaded.source
-        } else {
-          s.source = 'none'
-        }
         s.loaded = true
+        s.source = 'none'
       })
       subscribeExternalChange(async () => {
         const st = get()
@@ -181,8 +245,83 @@ export const useProjectStore = create<State & Actions>()(
       })
     },
 
-    reloadFromDisk: async () => {
+    openLastSession: async () => {
+      const last = loadLastSession()
+      if (last?.path) return get().openProjectFromPath(last.path)
+      // No remembered path (browser build, or first-ever Electron boot that
+      // somehow wrote an unpathed entry) — fall back to the canonical slot.
       const loaded = await loadProject()
+      if (loaded.status !== 'ok') return false
+      set((s) => {
+        s.project = loaded.project
+        s.source = loaded.source
+        s.currentPath = null
+        s.saveStatus = 'saved'
+        s.savedAt = Date.now()
+      })
+      saveLastSession({ path: null, when: Date.now() })
+      return true
+    },
+
+    openProjectFromPath: async (path) => {
+      const loaded = await loadProjectFromPath(path)
+      if (loaded.status !== 'ok') {
+        if (loaded.status === 'empty') {
+          saveRecents(removeRecent(loadRecents(), (r) => r.path === path))
+          const last = loadLastSession()
+          if (last?.path === path) clearLastSession()
+        }
+        return false
+      }
+      const resolvedPath = loaded.path ?? path
+      set((s) => {
+        s.project = loaded.project
+        s.source = 'disk'
+        s.currentPath = resolvedPath
+        s.saveStatus = 'saved'
+        s.savedAt = Date.now()
+        s.externalChangePending = false
+      })
+      rememberOpened(resolvedPath)
+      return true
+    },
+
+    openProjectFromDialog: async () => {
+      const res = await importProject()
+      if (!res) return false
+      const path = res.path
+      set((s) => {
+        s.project = res.project
+        s.source = 'disk'
+        s.currentPath = path ?? null
+        s.saveStatus = 'saved'
+        s.savedAt = Date.now()
+      })
+      if (path) rememberOpened(path)
+      else markDefaultSlotOpened(res.project.meta.name)
+      return true
+    },
+
+    openProjectFromText: (text, opts) => {
+      const p = importProjectFromText(text)
+      if (!p) return false
+      const path = opts?.path
+      set((s) => {
+        s.project = p
+        s.source = 'disk'
+        s.currentPath = path ?? null
+      })
+      get()._persist()
+      if (path) rememberOpened(path)
+      else markDefaultSlotOpened(opts?.name ?? p.meta.name)
+      return true
+    },
+
+    reloadFromDisk: async () => {
+      const { currentPath } = get()
+      const loaded = currentPath
+        ? await loadProjectFromPath(currentPath)
+        : await loadProject()
       if (loaded.status !== 'ok') return
       set((s) => {
         s.project = loaded.project
@@ -198,22 +337,14 @@ export const useProjectStore = create<State & Actions>()(
       get()._persist()
     },
 
-    importFromText: (text) => {
-      const p = importProjectFromText(text)
-      if (!p) return false
-      commit((s) => {
-        s.project = p
-        s.source = 'disk'
-      })
-      return true
-    },
-
     loadSample: () => {
       const p = migrate(sampleProject)
       commit((s) => {
         s.project = p
         s.source = 'disk'
+        s.currentPath = null
       })
+      markDefaultSlotOpened(p.meta.name)
     },
 
     loadLodestarRoadmap: () => {
@@ -221,7 +352,9 @@ export const useProjectStore = create<State & Actions>()(
       commit((s) => {
         s.project = p
         s.source = 'disk'
+        s.currentPath = null
       })
+      markDefaultSlotOpened(p.meta.name)
     },
 
     startEmptyProject: (name) => {
@@ -238,7 +371,9 @@ export const useProjectStore = create<State & Actions>()(
       commit((s) => {
         s.project = empty
         s.source = 'disk'
+        s.currentPath = null
       })
+      markDefaultSlotOpened(empty.meta.name)
     },
 
     closeCurrentProject: () => {
@@ -254,6 +389,7 @@ export const useProjectStore = create<State & Actions>()(
           modules: [],
         }
         s.source = 'none'
+        s.currentPath = null
         s.history = []
         s.future = []
         s.drawerFeatureId = null
@@ -262,7 +398,14 @@ export const useProjectStore = create<State & Actions>()(
         s.mindmapOverrides = {}
         s.depEditor = null
       })
+      clearLastSession()
     },
+
+    recents: () => loadRecents(),
+    forgetRecent: (predicate) => {
+      saveRecents(removeRecent(loadRecents(), predicate))
+    },
+    lastSession: () => loadLastSession(),
 
     // ———————————————————————————————————————————————————————
     // UI state (filters, overlays, cursor). These are not undoable.
@@ -743,12 +886,7 @@ export const useProjectStore = create<State & Actions>()(
     },
 
     importFile: async () => {
-      const imported = await importProject()
-      if (!imported) return
-      commit((s) => {
-        s.project = imported
-        s.source = 'disk'
-      })
+      await get().openProjectFromDialog()
     },
 
     // ———————————————————————————————————————————————————————
@@ -769,7 +907,8 @@ export const useProjectStore = create<State & Actions>()(
       if (saveTimer) clearTimeout(saveTimer)
       saveTimer = setTimeout(async () => {
         try {
-          await saveProject(get().project)
+          const { project, currentPath } = get()
+          await saveProject(project, currentPath ?? undefined)
           set((s) => {
             s.saveStatus = 'saved'
             s.savedAt = Date.now()

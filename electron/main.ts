@@ -28,9 +28,6 @@ function dataDir(): string {
 function dataFile(): string {
   return path.join(dataDir(), 'project.json')
 }
-function backupFile(): string {
-  return dataFile() + '.bak'
-}
 
 const ZOOM_STEP = 0.1
 const ZOOM_MIN = 0.5
@@ -39,6 +36,7 @@ const ZOOM_MAX = 2.5
 let win: BrowserWindow | null = null
 let watcher: FSWatcher | null = null
 let writingOwn = false
+let watchedPath: string | null = null
 
 async function ensureDataFile(): Promise<void> {
   if (!existsSync(dataDir())) {
@@ -153,16 +151,16 @@ function createWindow(): void {
 
   win.on('closed', () => {
     win = null
-    watcher?.close()
-    watcher = null
+    stopWatcher()
   })
 }
 
-function startWatcher(): void {
-  if (!existsSync(dataFile())) return
+function startWatcher(targetPath: string = dataFile()): void {
+  if (!existsSync(targetPath)) return
   watcher?.close()
+  watchedPath = targetPath
   try {
-    watcher = fsWatch(dataFile(), { persistent: false }, (eventType) => {
+    watcher = fsWatch(targetPath, { persistent: false }, (eventType) => {
       if (writingOwn) return
       if (eventType === 'change' && win) {
         win.webContents.send('project:external-change')
@@ -173,42 +171,56 @@ function startWatcher(): void {
   }
 }
 
-ipcMain.handle('project:load', async () => {
-  await ensureDataFile()
-  if (!existsSync(dataFile())) {
+function stopWatcher(): void {
+  watcher?.close()
+  watcher = null
+  watchedPath = null
+}
+
+ipcMain.handle('project:load', async (_evt, targetPath?: unknown) => {
+  const explicit = typeof targetPath === 'string' && targetPath ? targetPath : null
+  const target = explicit ?? dataFile()
+  if (!explicit) await ensureDataFile()
+  if (!existsSync(target)) {
     return { ok: false, error: 'NOT_FOUND' }
   }
   try {
-    const raw = await fs.readFile(dataFile(), 'utf-8')
-    return { ok: true, data: JSON.parse(raw) }
+    const raw = await fs.readFile(target, 'utf-8')
+    if (watchedPath !== target) startWatcher(target)
+    return { ok: true, data: JSON.parse(raw), path: target }
   } catch (err) {
     return { ok: false, error: String(err) }
   }
 })
 
-ipcMain.handle('project:save', async (_evt, payload: unknown) => {
-  await ensureDataFile()
-  try {
-    writingOwn = true
-    // Rotating single-slot backup: copy previous file before overwrite.
-    if (existsSync(dataFile())) {
-      try {
-        await fs.copyFile(dataFile(), backupFile())
-      } catch (err) {
-        console.warn('Backup copy failed (non-fatal):', err)
+ipcMain.handle(
+  'project:save',
+  async (_evt, payload: unknown, targetPath?: unknown) => {
+    const explicit = typeof targetPath === 'string' && targetPath ? targetPath : null
+    const target = explicit ?? dataFile()
+    if (!explicit) await ensureDataFile()
+    try {
+      writingOwn = true
+      // Rotating single-slot backup: copy previous file before overwrite.
+      if (existsSync(target)) {
+        try {
+          await fs.copyFile(target, target + '.bak')
+        } catch (err) {
+          console.warn('Backup copy failed (non-fatal):', err)
+        }
       }
-    }
-    await fs.writeFile(dataFile(), JSON.stringify(payload, null, 2), 'utf-8')
-    if (!watcher) startWatcher()
-    setTimeout(() => {
+      await fs.writeFile(target, JSON.stringify(payload, null, 2), 'utf-8')
+      if (!watcher || watchedPath !== target) startWatcher(target)
+      setTimeout(() => {
+        writingOwn = false
+      }, 200)
+      return { ok: true, path: target }
+    } catch (err) {
       writingOwn = false
-    }, 200)
-    return { ok: true }
-  } catch (err) {
-    writingOwn = false
-    return { ok: false, error: String(err) }
-  }
-})
+      return { ok: false, error: String(err) }
+    }
+  },
+)
 
 ipcMain.handle('project:export', async (_evt, payload: unknown) => {
   if (!win) return { ok: false, error: 'NO_WINDOW' }
@@ -277,7 +289,10 @@ app.whenReady().then(async () => {
   await ensureDataFile()
   buildMenu()
   createWindow()
-  startWatcher()
+  // Watcher no longer starts here — the renderer tells us which file is
+  // active via project:load / project:save, and the watcher latches onto
+  // that path. Prevents watching a stale ~/.config/lodestar file when the
+  // user is actually working against an arbitrary project.json.
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

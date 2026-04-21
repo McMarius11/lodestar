@@ -117,12 +117,17 @@ export function TopBar() {
     ])
   }
 
+  const filtersActive = useProjectStore(
+    (s) => s.activeStatus !== 'all' || s.activeMilestone !== 'all',
+  )
+
   return (
     <header className="relative z-20 border-b border-line/60 bg-void/80 backdrop-blur-sm">
+      {/* Row 1 — identity, navigation, primary actions */}
       <div className="flex items-stretch">
         {/* Brand */}
         <div
-          className="flex items-stretch border-r border-line/60 min-w-[280px]"
+          className="flex items-stretch border-r border-line/60 min-w-[260px] shrink-0"
           onContextMenu={(e) => {
             e.preventDefault()
             projectCtx.openAt(e.clientX, e.clientY, [
@@ -182,7 +187,11 @@ export function TopBar() {
         </div>
 
         {/* Tabs */}
-        <nav className="flex items-stretch flex-1 overflow-x-auto scroll-thin">
+        <nav
+          className="flex items-stretch flex-1 min-w-0 overflow-x-auto scroll-thin"
+          role="tablist"
+          aria-label="Views"
+        >
           {tabs.map((t) => {
             const isActive = t.id === active
             const isValidateTab = t.id === 'validate'
@@ -192,8 +201,13 @@ export function TopBar() {
                 key={t.id}
                 onClick={() => setActive(t.id)}
                 title={`${t.label} (${t.tag})`}
+                role="tab"
+                aria-selected={isActive}
+                aria-label={t.label}
+                aria-controls={`view-${t.id}`}
+                data-testid={`tab-${t.id}`}
                 className={clsx(
-                  'group relative px-5 py-3 border-r border-line/60 transition-colors',
+                  'group relative px-4 py-2.5 border-r border-line/60 transition-colors shrink-0',
                   isActive ? 'bg-raised/60' : 'hover:bg-raised/30',
                 )}
               >
@@ -223,20 +237,22 @@ export function TopBar() {
                   )}
                 </div>
                 {isActive && (
-                  <span className="absolute left-0 right-0 bottom-[-1px] h-[2px] bg-accent" />
+                  <span className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent" />
                 )}
               </button>
             )
           })}
         </nav>
 
-        {/* Right cluster */}
-        <div className="flex items-center gap-2 px-3 border-l border-line/60">
+        {/* Right cluster — primary actions only; filters live on row 2 */}
+        <div className="flex items-center gap-2 px-3 border-l border-line/60 shrink-0">
           <div className="flex items-center gap-1 pr-1 border-r border-line/60">
             <IconBtn
               onClick={() => undo()}
               disabled={!canUndo}
               title={`Undo (⌘Z) · ${historyDepth} steps`}
+              aria-label="Undo"
+              data-testid="btn-undo"
             >
               ↶
             </IconBtn>
@@ -244,12 +260,16 @@ export function TopBar() {
               onClick={() => redo()}
               disabled={!canRedo}
               title={`Redo (⌘⇧Z) · ${futureDepth} steps`}
+              aria-label="Redo"
+              data-testid="btn-redo"
             >
               ↷
             </IconBtn>
             <button
               onClick={openNewMenu}
               title="Create…"
+              aria-label="Create"
+              data-testid="btn-create"
               className={clsx(
                 'px-2 py-1 border border-line/40 text-sm transition-colors',
                 'hover:bg-raised hover:border-line-strong/80',
@@ -258,17 +278,33 @@ export function TopBar() {
               ＋
             </button>
           </div>
-          <StatusFilter />
-          <MilestoneFilter />
           <SaveIndicator status={saveStatus} savedAt={savedAt} />
           <button
             onClick={() => togglePalette(true)}
             className="btn-ghost label-mono"
             title="Command Palette (⌘K)"
+            aria-label="Command Palette"
+            data-testid="btn-command-palette"
           >
             <span className="num-mono">⌘K</span>
           </button>
         </div>
+      </div>
+
+      {/* Row 2 — filters. Own strip so the milestone list can breathe
+          (and horizontally scroll on narrow windows) without squeezing tabs. */}
+      <div className="flex items-center gap-3 px-4 py-1.5 border-t border-line/40 bg-void/40 overflow-x-auto scroll-thin">
+        <span
+          className={clsx(
+            'label-mono shrink-0',
+            filtersActive ? 'text-accent' : 'text-fg-subtle',
+          )}
+          title={filtersActive ? 'A filter is active' : 'No filters applied'}
+        >
+          {filtersActive ? '● FILTER' : 'FILTER'}
+        </span>
+        <StatusFilter />
+        <MilestoneFilter />
       </div>
 
       {newCtx.menu}
@@ -314,17 +350,23 @@ function IconBtn({
   onClick,
   disabled,
   title,
+  'aria-label': ariaLabel,
+  'data-testid': dataTestId,
 }: {
   children: React.ReactNode
   onClick: () => void
   disabled?: boolean
   title: string
+  'aria-label'?: string
+  'data-testid'?: string
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={ariaLabel}
+      data-testid={dataTestId}
       className={clsx(
         'px-2 py-1 border border-line/40 text-sm transition-colors',
         'hover:bg-raised hover:border-line-strong/80',
@@ -365,6 +407,9 @@ function SaveIndicator({
     <span
       title={tooltip}
       aria-label={tooltip}
+      role="status"
+      data-testid="save-indicator"
+      data-save-status={status}
       className="flex items-center justify-center w-5 h-5"
     >
       <span

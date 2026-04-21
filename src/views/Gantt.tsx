@@ -107,7 +107,15 @@ export function Gantt() {
   }, [WEEK_W])
 
   return (
-    <div className="h-full flex flex-col">
+    <div
+      className="h-full flex flex-col"
+      role="tabpanel"
+      id="view-gantt"
+      aria-label="Gantt"
+      data-testid="view-gantt"
+      data-gantt-zoom={WEEK_W}
+      data-gantt-week-w={WEEK_W}
+    >
       <div className="px-8 pt-8 pb-4 border-b border-line/40 flex items-end justify-between gap-6">
         <div>
           <div className="label-mono mb-3">
@@ -285,6 +293,8 @@ export function Gantt() {
               ) : (
                 <div
                   key={`lf-${r.feature.id}`}
+                  data-feature-id={r.feature.id}
+                  data-gantt-label={r.feature.id}
                   role="button"
                   tabIndex={0}
                   onClick={(e) => {
@@ -433,6 +443,8 @@ export function Gantt() {
                 return (
                   <g
                     key={`bar-${f.id}`}
+                    data-feature-id={f.id}
+                    data-gantt-bar={f.id}
                     style={{ pointerEvents: 'auto' }}
                     onContextMenu={(e) => {
                       e.preventDefault()
@@ -512,6 +524,7 @@ export function Gantt() {
                       width={4}
                       height={ROW_H - 18}
                       fill="transparent"
+                      data-gantt-resize={f.id}
                       onPointerDown={onBarPointerDown('resize')}
                       style={{ cursor: 'ew-resize' }}
                     />

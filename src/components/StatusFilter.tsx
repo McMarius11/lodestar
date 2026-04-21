@@ -13,7 +13,11 @@ export function StatusFilter() {
   const set = useProjectStore((s) => s.setActiveStatus)
 
   return (
-    <div className="flex items-stretch border border-line/60">
+    <div
+      className="flex items-stretch border border-line/60"
+      role="group"
+      aria-label="Status filter"
+    >
       {options.map((o, i) => (
         <button
           key={o.id}
@@ -28,6 +32,9 @@ export function StatusFilter() {
               : 'text-fg-muted hover:text-fg hover:bg-raised/50',
           )}
           title={o.label}
+          aria-pressed={active === o.id}
+          aria-label={`Filter: ${o.label}`}
+          data-testid={`filter-status-${o.id}`}
         >
           <span className={clsx('w-1.5 h-1.5 rounded-full', o.dot)} />
           {o.label}

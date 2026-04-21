@@ -1,106 +1,107 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useProjectStore } from '@/store/useProjectStore'
-import { migrate } from '@/schema'
-import { loadProject } from '@/lib/persistence'
-
-const RECENT_KEY = 'lodestar:recent-files'
-
-type Recent = { name: string; path?: string; when: number }
-
-type ExistingProject = { name: string; version: string } | null
-
-function loadRecents(): Recent[] {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY)
-    if (!raw) return []
-    return JSON.parse(raw) as Recent[]
-  } catch {
-    return []
-  }
-}
+import type { Recent } from '@/lib/recentFiles'
+import type { LastSession } from '@/lib/lastSession'
 
 function basenameOf(p: string): string {
   const parts = p.split(/[/\\]/)
   return parts[parts.length - 1] || p
 }
 
+function formatWhen(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10)
+}
+
 export function WelcomeScreen() {
-  const importFromText = useProjectStore((s) => s.importFromText)
+  const openProjectFromPath = useProjectStore((s) => s.openProjectFromPath)
+  const openProjectFromDialog = useProjectStore((s) => s.openProjectFromDialog)
+  const openProjectFromText = useProjectStore((s) => s.openProjectFromText)
+  const openLastSession = useProjectStore((s) => s.openLastSession)
+  const recentsFn = useProjectStore((s) => s.recents)
+  const lastSessionFn = useProjectStore((s) => s.lastSession)
+  const forgetRecent = useProjectStore((s) => s.forgetRecent)
   const startEmpty = useProjectStore((s) => s.startEmptyProject)
+  const loadSample = useProjectStore((s) => s.loadSample)
   const loadRoadmap = useProjectStore((s) => s.loadLodestarRoadmap)
+
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [recents, setRecents] = useState<Recent[]>([])
-  const [existing, setExisting] = useState<ExistingProject>(null)
+  const [last, setLast] = useState<LastSession | null>(null)
+
+  const refreshLists = useCallback(() => {
+    setRecents(recentsFn())
+    setLast(lastSessionFn())
+  }, [lastSessionFn, recentsFn])
 
   useEffect(() => {
-    setRecents(loadRecents())
-    let cancelled = false
-    loadProject()
-      .then((res) => {
-        if (cancelled) return
-        if (res.status === 'ok' && res.project.modules.length > 0) {
-          setExisting({
-            name: res.project.meta.name || 'Untitled',
-            version: res.project.meta.version,
-          })
-        }
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
+    refreshLists()
+  }, [refreshLists])
+
+  const continueLabel = useMemo(() => {
+    if (!last) return null
+    if (last.path) {
+      const match = recents.find((r) => r.path === last.path)
+      return match?.name ?? basenameOf(last.path)
     }
-  }, [])
+    // Browser mode: no path — fall back to the name of the newest recent
+    // entry, if any. Otherwise a generic label.
+    return recents[0]?.name ?? 'your last project'
+  }, [last, recents])
 
-  const confirmOverwrite = useCallback(
-    (intent: string) => {
-      if (!existing) return true
-      return window.confirm(
-        `Your saved project "${existing.name}" (v${existing.version}) is still on disk.\n\n${intent} will overwrite it. Continue?`,
-      )
+  const onContinue = useCallback(async () => {
+    setError(null)
+    const ok = await openLastSession()
+    if (!ok) {
+      setError('Last project could not be reopened (file moved or deleted).')
+      refreshLists()
+    }
+  }, [openLastSession, refreshLists])
+
+  const onReopenRecent = useCallback(
+    async (r: Recent) => {
+      if (!r.path) return
+      setError(null)
+      const ok = await openProjectFromPath(r.path)
+      if (!ok) {
+        setError(`File moved or deleted: ${r.name}`)
+        refreshLists()
+      }
     },
-    [existing],
+    [openProjectFromPath, refreshLists],
   )
 
-  const rememberRecent = useCallback(
-    (r: Recent) => {
-      const next = [r, ...recents.filter((x) => x.name !== r.name)].slice(0, 5)
-      localStorage.setItem(RECENT_KEY, JSON.stringify(next))
-      setRecents(next)
-    },
-    [recents],
-  )
+  const onBrowse = useCallback(async () => {
+    setError(null)
+    const ok = await openProjectFromDialog()
+    if (!ok) {
+      const api = typeof window !== 'undefined' ? window.projectAPI : undefined
+      if (api) return // user cancelled — silent
+      // Browser fallback: Electron-less environments don't get a dialog.
+      setError('Could not open file dialog.')
+    }
+  }, [openProjectFromDialog])
 
-  const clearRecent = useCallback(
-    (predicate: (r: Recent) => boolean) => {
-      const next = recents.filter((r) => !predicate(r))
-      localStorage.setItem(RECENT_KEY, JSON.stringify(next))
-      setRecents(next)
-    },
-    [recents],
-  )
-
-  const handleFile = useCallback(
+  const onDropFile = useCallback(
     async (file: File) => {
       setError(null)
       try {
         const text = await file.text()
-        const ok = importFromText(text)
+        const api = typeof window !== 'undefined' ? window.projectAPI : undefined
+        const path = api?.getFilePath?.(file) ?? undefined
+        const ok = openProjectFromText(text, { name: file.name, path })
         if (!ok) {
           setError('That file is not a valid Lodestar project.')
           return
         }
-        const api = typeof window !== 'undefined' ? window.projectAPI : undefined
-        const path = api?.getFilePath?.(file) ?? undefined
-        rememberRecent({ name: file.name, path, when: Date.now() })
-        setExisting(null)
+        refreshLists()
       } catch (err) {
         setError('Failed to read file: ' + String(err))
       }
     },
-    [importFromText, rememberRecent],
+    [openProjectFromText, refreshLists],
   )
 
   const onDrop = useCallback(
@@ -108,109 +109,27 @@ export function WelcomeScreen() {
       e.preventDefault()
       setDragging(false)
       const file = e.dataTransfer?.files?.[0]
-      if (file) handleFile(file)
+      if (file) onDropFile(file)
     },
-    [handleFile],
+    [onDropFile],
   )
-
-  const onBrowse = useCallback(async () => {
-    setError(null)
-    const api = typeof window !== 'undefined' ? window.projectAPI : undefined
-    if (api?.importFrom) {
-      const res = await api.importFrom()
-      if (!res.ok) {
-        if (res.error !== 'CANCELED') setError(res.error)
-        return
-      }
-      const ok = importFromText(JSON.stringify(res.data))
-      if (!ok) {
-        setError('That file is not a valid Lodestar project.')
-        return
-      }
-      if (res.path) {
-        rememberRecent({ name: basenameOf(res.path), path: res.path, when: Date.now() })
-      }
-      setExisting(null)
-      return
-    }
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'application/json'
-    input.onchange = () => {
-      const f = input.files?.[0]
-      if (f) handleFile(f)
-    }
-    input.click()
-  }, [handleFile, importFromText, rememberRecent])
-
-  const reopenPath = useCallback(
-    async (r: Recent) => {
-      if (!r.path) return
-      setError(null)
-      const api = typeof window !== 'undefined' ? window.projectAPI : undefined
-      if (!api?.openPath) return
-      if (!confirmOverwrite(`Opening "${r.name}"`)) return
-      const res = await api.openPath(r.path)
-      if (!res.ok) {
-        if (res.error === 'NOT_FOUND') {
-          clearRecent((x) => x.path === r.path)
-          setError(`File moved or deleted: ${r.name}`)
-        } else {
-          setError(`Failed to open ${r.name}: ${res.error}`)
-        }
-        return
-      }
-      const ok = importFromText(JSON.stringify(res.data))
-      if (!ok) {
-        setError('That file is no longer a valid Lodestar project.')
-        return
-      }
-      rememberRecent({ name: r.name, path: r.path, when: Date.now() })
-      setExisting(null)
-    },
-    [confirmOverwrite, clearRecent, importFromText, rememberRecent],
-  )
-
-  const loadExample = useCallback(async () => {
-    setError(null)
-    if (!confirmOverwrite('Loading the Nimbus example')) return
-    const anyAPI = (typeof window !== 'undefined' ? window.projectAPI : undefined) as
-      | { loadExample?: () => Promise<{ ok: boolean; data?: unknown }> }
-      | undefined
-    if (anyAPI?.loadExample) {
-      const res = await anyAPI.loadExample()
-      if (res.ok && res.data) {
-        try {
-          const project = migrate(res.data)
-          useProjectStore.setState({ project, source: 'disk' })
-          useProjectStore.getState()._persist()
-          setExisting(null)
-          return
-        } catch (err) {
-          console.warn('Bundled example invalid, using in-memory sample:', err)
-        }
-      }
-    }
-    useProjectStore.getState().loadSample()
-    setExisting(null)
-  }, [confirmOverwrite])
-
-  const onLoadRoadmap = useCallback(() => {
-    setError(null)
-    if (!confirmOverwrite("Loading Lodestar's own roadmap")) return
-    loadRoadmap()
-    setExisting(null)
-  }, [confirmOverwrite, loadRoadmap])
 
   const onStartEmpty = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault()
       setError(null)
-      if (!confirmOverwrite('Starting an empty project')) return
       startEmpty(name.trim() || 'Untitled Project')
-      setExisting(null)
     },
-    [confirmOverwrite, name, startEmpty],
+    [name, startEmpty],
+  )
+
+  const onForgetRecent = useCallback(
+    (r: Recent, e: React.MouseEvent) => {
+      e.stopPropagation()
+      forgetRecent((x) => (r.path ? x.path === r.path : x.name === r.name))
+      refreshLists()
+    },
+    [forgetRecent, refreshLists],
   )
 
   return (
@@ -221,25 +140,38 @@ export function WelcomeScreen() {
           <span className="label-mono text-fg-subtle">project planner</span>
         </div>
         <h1 className="ser-display text-5xl md:text-6xl mb-2 leading-none">
-          {existing ? 'Welcome back.' : 'Nothing yet.'}
+          {continueLabel ? 'Welcome back.' : 'Nothing yet.'}
         </h1>
         <p className="text-fg-muted mb-8 max-w-md">
-          {existing ? (
+          {continueLabel ? (
             <>
-              Your saved project{' '}
-              <span className="num-mono text-fg">{existing.name}</span> is still on
-              disk. Re-open it from the Recent list below, drop a different
-              <span className="num-mono text-fg"> project.json</span>, or replace it
-              with a sample.
+              Pick up where you left off, or open a different{' '}
+              <span className="num-mono text-fg">project.json</span>.
             </>
           ) : (
             <>
               Drop a <span className="num-mono text-fg">project.json</span> to
-              continue where you left off, start from an empty skeleton, or explore
-              a sample project to see the views in action.
+              continue, start from an empty skeleton, or explore a sample
+              project to see the views in action.
             </>
           )}
         </p>
+
+        {continueLabel && (
+          <motion.button
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={onContinue}
+            className="w-full mb-4 flex items-center justify-between border border-accent/60 bg-accent/5 hover:bg-accent/10 px-5 py-3 text-left transition-colors"
+          >
+            <div>
+              <div className="label-mono text-accent mb-0.5">CONTINUE</div>
+              <div className="num-mono text-fg">{continueLabel}</div>
+            </div>
+            <span className="ser-display text-2xl text-accent">→</span>
+          </motion.button>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 6 }}
@@ -252,7 +184,7 @@ export function WelcomeScreen() {
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           className={[
-            'relative border border-dashed p-8 mb-6 cursor-pointer transition-colors',
+            'relative border border-dashed p-6 mb-6 cursor-pointer transition-colors',
             dragging
               ? 'border-accent bg-accent/5'
               : 'border-line/60 hover:border-line-strong/80',
@@ -260,13 +192,13 @@ export function WelcomeScreen() {
           onClick={onBrowse}
         >
           <div className="flex items-center gap-4">
-            <div className="text-4xl ser-display text-accent">↓</div>
+            <div className="text-3xl ser-display text-accent">↓</div>
             <div>
               <div className="text-fg font-medium mb-1">
-                Drop a project.json here
+                Open a project.json
               </div>
               <div className="label-mono text-fg-subtle">
-                or click to browse · will overwrite data/project.json
+                drop here · or click to browse
               </div>
             </div>
           </div>
@@ -279,7 +211,7 @@ export function WelcomeScreen() {
         )}
 
         <div className="grid md:grid-cols-2 gap-3 mb-3">
-          <button onClick={loadExample} className="btn-ghost justify-between text-left">
+          <button onClick={loadSample} className="btn-ghost justify-between text-left">
             <div>
               <div className="text-fg">Try the Nimbus example</div>
               <div className="label-mono text-fg-subtle">6 modules · 5 milestones</div>
@@ -287,7 +219,7 @@ export function WelcomeScreen() {
             <span className="text-fg-subtle">→</span>
           </button>
 
-          <button onClick={onLoadRoadmap} className="btn-ghost justify-between text-left">
+          <button onClick={loadRoadmap} className="btn-ghost justify-between text-left">
             <div>
               <div className="text-fg">Look at Lodestar's own roadmap</div>
               <div className="label-mono text-fg-subtle">
@@ -320,28 +252,40 @@ export function WelcomeScreen() {
             <div className="space-y-1">
               {recents.map((r) => {
                 const clickable = Boolean(
-                  r.path && typeof window !== 'undefined' && window.projectAPI?.openPath,
+                  r.path && typeof window !== 'undefined' && window.projectAPI,
                 )
+                const key = (r.path ?? r.name) + r.when
                 if (clickable) {
                   return (
-                    <button
-                      key={(r.path ?? r.name) + r.when}
-                      onClick={() => reopenPath(r)}
-                      className="w-full flex items-center justify-between py-1.5 px-2 hover:bg-raised/60 label-mono text-left transition-colors group"
+                    <div
+                      key={key}
+                      className="flex items-center hover:bg-raised/60 label-mono transition-colors group"
                       title={r.path}
                     >
-                      <span className="num-mono text-fg group-hover:text-accent truncate">
-                        {r.name}
-                      </span>
-                      <span className="text-fg-subtle shrink-0 ml-4">
-                        {formatWhen(r.when)}
-                      </span>
-                    </button>
+                      <button
+                        onClick={() => onReopenRecent(r)}
+                        className="flex-1 flex items-center justify-between py-1.5 px-2 text-left"
+                      >
+                        <span className="num-mono text-fg group-hover:text-accent truncate">
+                          {r.name}
+                        </span>
+                        <span className="text-fg-subtle shrink-0 ml-4">
+                          {formatWhen(r.when)}
+                        </span>
+                      </button>
+                      <button
+                        onClick={(e) => onForgetRecent(r, e)}
+                        aria-label={`Remove ${r.name} from recents`}
+                        className="px-2 py-1.5 text-fg-subtle hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        ×
+                      </button>
+                    </div>
                   )
                 }
                 return (
                   <div
-                    key={(r.path ?? r.name) + r.when}
+                    key={key}
                     className="flex items-center justify-between py-1.5 px-2 hover:bg-raised/40 label-mono"
                     title="Drop this file again to re-open it (path not captured)"
                   >
@@ -354,16 +298,11 @@ export function WelcomeScreen() {
               })}
             </div>
             <p className="label-mono text-fg-subtle mt-2">
-              Click to re-open · fallback: drop the file again
+              Click to re-open · × removes the entry · drop the file again to recapture its path
             </p>
           </div>
         )}
       </div>
     </div>
   )
-}
-
-function formatWhen(ts: number): string {
-  const d = new Date(ts)
-  return d.toISOString().slice(0, 10)
 }

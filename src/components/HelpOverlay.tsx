@@ -59,6 +59,7 @@ export function HelpOverlay() {
             transition={{ duration: 0.15 }}
             className="fixed inset-0 bg-sunken z-50"
             onClick={() => close(false)}
+            data-testid="dialog-help-backdrop"
           />
           <motion.div
             initial={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -66,11 +67,15 @@ export function HelpOverlay() {
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.16 }}
             className="fixed z-50 left-1/2 top-[10vh] -translate-x-1/2 w-[640px] max-w-[92vw] bg-base border border-line-strong/60"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="help-title"
+            data-testid="dialog-help"
           >
             <header className="flex items-baseline justify-between px-6 py-4 border-b border-line/60">
               <div>
                 <div className="label-mono mb-1">KEYBOARD</div>
-                <h2 className="ser-display italic text-3xl">shortcuts</h2>
+                <h2 id="help-title" className="ser-display italic text-3xl">shortcuts</h2>
               </div>
               <button
                 onClick={() => close(false)}

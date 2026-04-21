@@ -123,7 +123,13 @@ export function Kanban() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div
+      className="h-full flex flex-col"
+      role="tabpanel"
+      id="view-kanban"
+      aria-label="Kanban"
+      data-testid="view-kanban"
+    >
       <div className="px-8 pt-8 pb-4 border-b border-line/40 flex items-end justify-between gap-6">
         <div>
           <div className="label-mono mb-3">
@@ -155,6 +161,8 @@ export function Kanban() {
           return (
             <div
               key={col.id}
+              data-kanban-col={col.id}
+              data-testid={`kanban-col-${col.id}`}
               onDragOver={(e) => {
                 if (!dragId) return
                 e.preventDefault()
@@ -310,6 +318,7 @@ function KanbanCard({
 
   return (
     <div
+      data-feature-id={f.id}
       draggable
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move'

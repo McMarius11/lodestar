@@ -119,10 +119,19 @@ function DepEditorHost() {
 function Footer() {
   const project = useProjectStore((s) => s.project)
   const source = useProjectStore((s) => s.source)
+  const currentPath = useProjectStore((s) => s.currentPath)
   const toggleHelp = useProjectStore((s) => s.toggleHelp)
   const allFeatures = project.modules.flatMap((m) => m.features)
   const allTasks = allFeatures.flatMap((f) => f.tasks)
   const done = allTasks.filter((t) => t.done).length
+  const locationLabel =
+    source === 'disk'
+      ? currentPath
+        ? 'STORED · ' + currentPath.split(/[/\\]/).pop()
+        : 'STORED · data/project.json'
+      : source === 'localStorage'
+      ? 'STORED · localStorage'
+      : 'SESSION · sample data'
 
   return (
     <footer className="border-t border-line/60 bg-void/80 backdrop-blur-sm">
@@ -149,12 +158,11 @@ function Footer() {
             {allTasks.length.toString().padStart(3, '0')}
           </span>
         </span>
-        <span className="ml-auto text-fg-subtle">
-          {source === 'disk'
-            ? 'STORED · data/project.json'
-            : source === 'localStorage'
-            ? 'STORED · localStorage'
-            : 'SESSION · sample data'}
+        <span
+          className="ml-auto text-fg-subtle truncate max-w-[40ch]"
+          title={source === 'disk' && currentPath ? currentPath : undefined}
+        >
+          {locationLabel}
         </span>
         <span className="text-fg-subtle hidden md:inline">
           ⌘K palette · ⌘Z undo

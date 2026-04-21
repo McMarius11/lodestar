@@ -9,7 +9,13 @@ export function ValidationPanel() {
   const counts = countBySeverity(issues)
 
   return (
-    <div className="h-full overflow-auto scroll-thin">
+    <div
+      className="h-full overflow-auto scroll-thin"
+      role="tabpanel"
+      id="view-validate"
+      aria-label="Validation"
+      data-testid="view-validate"
+    >
       <div className="p-8 border-b border-line/60">
         <div className="flex items-center gap-4 mb-6">
           <h1 className="ser-display text-5xl italic">Status</h1>
