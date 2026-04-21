@@ -5,16 +5,17 @@ import { MilestoneFilter } from './MilestoneFilter'
 import { StatusFilter } from './StatusFilter'
 import { MilestoneEditor } from './MilestoneEditor'
 import { ProjectMetaEditor } from './ProjectMetaEditor'
-import { useEffect, useMemo, useState } from 'react'
+import { useContextMenu } from './ContextMenu'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { validate } from '@/lib/validate'
 
 const tabs: { id: ViewId; label: string; tag: string }[] = [
-  { id: 'scope', label: 'Scope', tag: '01' },
-  { id: 'roadmap', label: 'Roadmap', tag: '02' },
-  { id: 'kanban', label: 'Kanban', tag: '03' },
-  { id: 'mindmap', label: 'Mind', tag: '04' },
-  { id: 'gantt', label: 'Gantt', tag: '05' },
-  { id: 'validate', label: 'Validate', tag: '06' },
+  { id: 'scope', label: 'Scope', tag: '1' },
+  { id: 'roadmap', label: 'Roadmap', tag: '2' },
+  { id: 'kanban', label: 'Kanban', tag: '3' },
+  { id: 'mindmap', label: 'Mind', tag: '4' },
+  { id: 'gantt', label: 'Gantt', tag: '5' },
+  { id: 'validate', label: 'Status', tag: '6' },
 ]
 
 export function TopBar() {
@@ -27,8 +28,10 @@ export function TopBar() {
   const source = useProjectStore((s) => s.source)
   const undo = useProjectStore((s) => s.undo)
   const redo = useProjectStore((s) => s.redo)
-  const canUndo = useProjectStore((s) => s.history.length > 0)
-  const canRedo = useProjectStore((s) => s.future.length > 0)
+  const historyDepth = useProjectStore((s) => s.history.length)
+  const futureDepth = useProjectStore((s) => s.future.length)
+  const canUndo = historyDepth > 0
+  const canRedo = futureDepth > 0
   const addFeature = useProjectStore((s) => s.addFeature)
   const addModule = useProjectStore((s) => s.addModule)
   const openDrawer = useProjectStore((s) => s.openDrawer)
@@ -36,6 +39,7 @@ export function TopBar() {
   const metaEditorOpen = useProjectStore((s) => s.metaEditorOpen)
   const toggleMilestoneEditor = useProjectStore((s) => s.toggleMilestoneEditor)
   const toggleMetaEditor = useProjectStore((s) => s.toggleMetaEditor)
+  const newCtx = useContextMenu()
 
   const { errCount, warnCount } = useMemo(() => {
     const issues = validate(project)
@@ -53,6 +57,32 @@ export function TopBar() {
     }
     const id = addFeature(firstModule.id)
     openDrawer(id)
+  }
+
+  const openNewMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    newCtx.openAt(rect.left, rect.bottom + 4, [
+      {
+        kind: 'action',
+        label: 'New Feature',
+        hint: 'N',
+        disabled: project.modules.length === 0,
+        run: handleAddFeature,
+      },
+      {
+        kind: 'action',
+        label: 'New Module',
+        run: () => {
+          addModule()
+        },
+      },
+      { kind: 'separator' },
+      {
+        kind: 'action',
+        label: 'Edit Milestones…',
+        run: () => toggleMilestoneEditor(true),
+      },
+    ])
   }
 
   return (
@@ -87,15 +117,13 @@ export function TopBar() {
               <button
                 key={t.id}
                 onClick={() => setActive(t.id)}
+                title={`${t.label} (${t.tag})`}
                 className={clsx(
                   'group relative px-5 py-3 border-r border-line/60 transition-colors',
                   isActive ? 'bg-raised/60' : 'hover:bg-raised/30',
                 )}
               >
-                <div className="flex items-baseline gap-2.5">
-                  <span className="label-mono num-mono text-fg-subtle group-hover:text-fg-muted">
-                    {t.tag}
-                  </span>
+                <div className="flex items-baseline gap-2">
                   <span
                     className={clsx(
                       'text-sm transition-colors',
@@ -103,6 +131,9 @@ export function TopBar() {
                     )}
                   >
                     {t.label}
+                  </span>
+                  <span className="num-mono text-[9px] leading-none text-fg-subtle group-hover:text-fg-muted">
+                    {t.tag}
                   </span>
                   {badge > 0 && (
                     <span
@@ -129,26 +160,29 @@ export function TopBar() {
         <div className="flex items-center gap-2 px-3 border-l border-line/60">
           <div className="flex items-center gap-1 pr-1 border-r border-line/60">
             <IconBtn
-              onClick={handleAddFeature}
-              title="Add feature (n)"
-              disabled={project.modules.length === 0}
+              onClick={() => undo()}
+              disabled={!canUndo}
+              title={`Undo (⌘Z) · ${historyDepth} steps`}
             >
-              <span className="label-mono">+ FEAT</span>
-            </IconBtn>
-            <IconBtn onClick={() => addModule()} title="Add module">
-              <span className="label-mono">+ MOD</span>
-            </IconBtn>
-            <IconBtn onClick={() => toggleMilestoneEditor(true)} title="Edit milestones">
-              <span className="label-mono">MS</span>
-            </IconBtn>
-          </div>
-          <div className="flex items-center gap-1 pr-1 border-r border-line/60">
-            <IconBtn onClick={() => undo()} disabled={!canUndo} title="Undo (⌘Z)">
               ↶
             </IconBtn>
-            <IconBtn onClick={() => redo()} disabled={!canRedo} title="Redo (⌘⇧Z)">
+            <IconBtn
+              onClick={() => redo()}
+              disabled={!canRedo}
+              title={`Redo (⌘⇧Z) · ${futureDepth} steps`}
+            >
               ↷
             </IconBtn>
+            <button
+              onClick={openNewMenu}
+              title="Create…"
+              className={clsx(
+                'px-2 py-1 border border-line/40 text-sm transition-colors',
+                'hover:bg-raised hover:border-line-strong/80',
+              )}
+            >
+              ＋
+            </button>
           </div>
           <StatusFilter />
           <MilestoneFilter />
@@ -163,6 +197,7 @@ export function TopBar() {
         </div>
       </div>
 
+      {newCtx.menu}
       {msEditorOpen && <MilestoneEditor onClose={() => toggleMilestoneEditor(false)} />}
       {metaEditorOpen && <ProjectMetaEditor onClose={() => toggleMetaEditor(false)} />}
     </header>
@@ -210,32 +245,35 @@ function SaveIndicator({
     return () => clearInterval(t)
   }, [])
 
-  const { label, color } =
+  const tooltip =
     status === 'saving'
-      ? { label: 'SAVING', color: 'text-accent' }
+      ? 'Saving…'
       : status === 'error'
-      ? { label: 'ERROR', color: 'text-danger' }
-      : savedAt && now - savedAt < 3500
-      ? { label: 'SAVED', color: 'text-success' }
+      ? 'Save failed — check console'
       : savedAt
-      ? { label: `SAVED · ${rel(now - savedAt)}`, color: 'text-fg-subtle' }
-      : { label: 'SYNCED', color: 'text-fg-subtle' }
+      ? `Saved · ${rel(now - savedAt)}`
+      : 'In sync'
+
+  const isSuccess = !!savedAt && now - savedAt < 3500
 
   return (
-    <span className={clsx('label-mono flex items-center gap-1.5', color)}>
+    <span
+      title={tooltip}
+      aria-label={tooltip}
+      className="flex items-center justify-center w-5 h-5"
+    >
       <span
         className={clsx(
-          'w-1.5 h-1.5 rounded-full',
+          'w-1.5 h-1.5 rounded-full transition-colors',
           status === 'saving'
             ? 'bg-accent animate-accent-pulse'
             : status === 'error'
             ? 'bg-danger'
-            : savedAt && now - savedAt < 3500
+            : isSuccess
             ? 'bg-success'
-            : 'bg-fg-subtle',
+            : 'bg-fg-subtle/70',
         )}
       />
-      {label}
     </span>
   )
 }

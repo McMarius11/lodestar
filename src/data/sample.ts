@@ -10,7 +10,7 @@ export const sampleProject: Project = {
     name: 'Nimbus',
     description: 'Self-hosted, end-to-end encrypted cloud storage.',
     version: '0.1.0',
-    schemaVersion: 2,
+    schemaVersion: 3,
     today: 4,
     milestones: [
       { id: 'v0.1', label: 'Foundation' },

@@ -24,6 +24,7 @@ export type Feature = {
   ganttEnd: number
   deps: Dep[]
   tasks: Task[]
+  rank?: number
 }
 
 export type Module = {
@@ -45,6 +46,7 @@ export type ProjectMeta = {
   schemaVersion: number
   milestones: Milestone[]
   today?: number
+  mindmapPositions?: Record<string, { x: number; y: number }>
 }
 
 export type Project = {

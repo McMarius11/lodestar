@@ -11,6 +11,8 @@ import {
 } from '@/lib/deps'
 import type { Feature, Module } from '@/types'
 import { EffortBadge } from '@/components/EffortBadge'
+import { useContextMenu } from '@/components/ContextMenu'
+import { featureMenu, useFeatureActionsApi } from '@/lib/featureActions'
 
 const ROW_H = 36
 const HEADER_H = 64
@@ -29,6 +31,19 @@ export function Gantt() {
   const [hovered, setHovered] = useState<string | null>(null)
   const [WEEK_W, setWeekW] = useState<number>(WEEK_W_DEFAULT)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const ctx = useContextMenu()
+  const api = useFeatureActionsApi()
+  const setFeatureGantt = useProjectStore((s) => s.setFeatureGantt)
+  const [drag, setDrag] = useState<{
+    id: string
+    mode: 'move' | 'resize'
+    origStart: number
+    origEnd: number
+    pointerX: number
+    deltaWeeks: number
+    snap: 'full' | 'half'
+    moved: boolean
+  } | null>(null)
 
   const modules = useMemo(
     () =>
@@ -309,6 +324,10 @@ export function Gantt() {
                 <button
                   key={`lf-${r.feature.id}`}
                   onClick={() => openDrawer(r.feature.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    ctx.openAt(e.clientX, e.clientY, featureMenu(api, r.feature))
+                  }}
                   onMouseEnter={() => {
                     hoveredRef.current = r.feature.id
                     setHovered(r.feature.id)
@@ -396,24 +415,112 @@ export function Gantt() {
               {layout.map((r) => {
                 if (r.kind !== 'feature') return null
                 const f = r.feature
-                const x = f.ganttStart * WEEK_W
-                const w = Math.max((f.ganttEnd - f.ganttStart) * WEEK_W, 8)
+                const isDragging = drag?.id === f.id
+                // While dragging, apply delta to the rendered position
+                const snap = drag?.snap === 'half' ? 0.5 : 1
+                const snapped =
+                  drag && isDragging
+                    ? Math.round(drag.deltaWeeks / snap) * snap
+                    : 0
+                const displayStart =
+                  isDragging && drag?.mode === 'move'
+                    ? drag.origStart + snapped
+                    : f.ganttStart
+                const displayEnd =
+                  isDragging && drag?.mode === 'move'
+                    ? drag.origEnd + snapped
+                    : isDragging && drag?.mode === 'resize'
+                    ? Math.max(drag.origStart + 1, drag.origEnd + snapped)
+                    : f.ganttEnd
+                const x = displayStart * WEEK_W
+                const w = Math.max((displayEnd - displayStart) * WEEK_W, 8)
                 const c = completion(f)
                 const st = featureStatus(f)
                 const conflict = hasConflict(project, f)
                 const color = r.module.color
                 const isHover = hovered === f.id
+                const onBarPointerDown = (mode: 'move' | 'resize') => (
+                  e: React.PointerEvent,
+                ) => {
+                  if (e.button !== 0) return
+                  e.stopPropagation()
+                  ;(e.target as Element).setPointerCapture?.(e.pointerId)
+                  setDrag({
+                    id: f.id,
+                    mode,
+                    origStart: f.ganttStart,
+                    origEnd: f.ganttEnd,
+                    pointerX: e.clientX,
+                    deltaWeeks: 0,
+                    snap: e.shiftKey ? 'half' : 'full',
+                    moved: false,
+                  })
+                }
                 return (
-                  <g key={`bar-${f.id}`} style={{ pointerEvents: 'auto' }}>
+                  <g
+                    key={`bar-${f.id}`}
+                    style={{ pointerEvents: 'auto' }}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      ctx.openAt(e.clientX, e.clientY, featureMenu(api, f))
+                    }}
+                    onPointerMove={(e) => {
+                      if (!drag || drag.id !== f.id) return
+                      const dx = e.clientX - drag.pointerX
+                      const deltaWeeks = dx / WEEK_W
+                      const moved = Math.abs(dx) > 4
+                      const snap: 'full' | 'half' = e.shiftKey ? 'half' : 'full'
+                      if (
+                        deltaWeeks !== drag.deltaWeeks ||
+                        moved !== drag.moved ||
+                        snap !== drag.snap
+                      ) {
+                        setDrag({ ...drag, deltaWeeks, moved, snap })
+                      }
+                    }}
+                    onPointerUp={(e) => {
+                      if (!drag || drag.id !== f.id) {
+                        return
+                      }
+                      ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+                      if (!drag.moved) {
+                        openDrawer(f.id)
+                      } else {
+                        const s = drag.snap === 'half' ? 0.5 : 1
+                        const snappedDelta = Math.round(drag.deltaWeeks / s) * s
+                        if (drag.mode === 'move') {
+                          setFeatureGantt(f.id, {
+                            start: drag.origStart + snappedDelta,
+                            end: drag.origEnd + snappedDelta,
+                          })
+                        } else {
+                          const newEnd = Math.max(
+                            drag.origStart + 1,
+                            drag.origEnd + snappedDelta,
+                          )
+                          setFeatureGantt(f.id, {
+                            start: drag.origStart,
+                            end: newEnd,
+                          })
+                        }
+                      }
+                      setDrag(null)
+                    }}
+                    onPointerCancel={() => setDrag(null)}
+                  >
                     <rect
                       x={x}
                       y={r.y + 9}
                       width={w}
                       height={ROW_H - 18}
                       fill={color}
-                      fillOpacity={st === 'done' ? 0.35 : 0.12}
+                      fillOpacity={
+                        isDragging ? 0.3 : st === 'done' ? 0.35 : 0.12
+                      }
                       stroke={conflict ? 'rgb(var(--danger))' : color}
                       strokeWidth={conflict ? 1.5 : 1}
+                      onPointerDown={onBarPointerDown('move')}
+                      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
                     />
                     <rect
                       x={x}
@@ -421,8 +528,30 @@ export function Gantt() {
                       width={w * c.pct}
                       height={ROW_H - 18}
                       fill={color}
-                      fillOpacity={0.85}
+                      fillOpacity={isDragging ? 0.5 : 0.85}
+                      style={{ pointerEvents: 'none' }}
                     />
+                    {/* right-edge resize handle */}
+                    <rect
+                      x={x + w - 4}
+                      y={r.y + 9}
+                      width={4}
+                      height={ROW_H - 18}
+                      fill="transparent"
+                      onPointerDown={onBarPointerDown('resize')}
+                      style={{ cursor: 'ew-resize' }}
+                    />
+                    {isHover && !isDragging && (
+                      <rect
+                        x={x + w - 4}
+                        y={r.y + 9}
+                        width={4}
+                        height={ROW_H - 18}
+                        fill="rgb(var(--fg))"
+                        fillOpacity={0.25}
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    )}
                     {isHover && (
                       <rect
                         x={x - 1}
@@ -432,6 +561,7 @@ export function Gantt() {
                         fill="none"
                         stroke="rgb(var(--fg))"
                         strokeWidth="1"
+                        style={{ pointerEvents: 'none' }}
                       />
                     )}
                     <text
@@ -444,6 +574,20 @@ export function Gantt() {
                     >
                       {f.effort}
                     </text>
+                    {isDragging && drag.moved && (
+                      <text
+                        x={x + w / 2}
+                        y={r.y + 6}
+                        textAnchor="middle"
+                        fontFamily="Geist Mono"
+                        fontSize="10"
+                        fill="rgb(var(--accent))"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        W{displayStart.toString().padStart(2, '0')}–W
+                        {displayEnd.toString().padStart(2, '0')}
+                      </text>
+                    )}
                   </g>
                 )
               })}
@@ -499,6 +643,7 @@ export function Gantt() {
           </div>
         </div>
       </div>
+      {ctx.menu}
     </div>
   )
 }

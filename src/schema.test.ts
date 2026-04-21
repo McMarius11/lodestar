@@ -58,6 +58,21 @@ describe('migrate', () => {
     expect(twice).toEqual(once)
   })
 
+  it('round-trips v3 rank through migrate', () => {
+    const input = JSON.parse(JSON.stringify(minimal))
+    input.meta.schemaVersion = 3
+    input.modules[0].features[0].rank = 2.5
+    const out = migrate(input)
+    expect(out.modules[0].features[0].rank).toBe(2.5)
+  })
+
+  it('drops non-finite rank values', () => {
+    const input = JSON.parse(JSON.stringify(minimal))
+    input.modules[0].features[0].rank = Number.NaN
+    const out = migrate(input)
+    expect(out.modules[0].features[0].rank).toBeUndefined()
+  })
+
   it('migrates legacy milestones as string[] with milestoneLabels map', () => {
     const legacy = {
       meta: {

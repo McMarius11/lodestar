@@ -32,7 +32,7 @@ function applyZoom(z: number): void {
 }
 
 function clamp(n: number): number {
-  return Math.min(MAX, Math.max(MIN, n))
+  return Math.min(MAX, Math.max(MIN, Number(n.toFixed(2))))
 }
 
 /**

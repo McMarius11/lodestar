@@ -64,7 +64,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       { id: 'kanban', label: 'Go to Kanban' },
       { id: 'mindmap', label: 'Go to Mind Map' },
       { id: 'gantt', label: 'Go to Gantt' },
-      { id: 'validate', label: 'Go to Validation' },
+      { id: 'validate', label: 'Go to Status' },
     ]
     const list: Cmd[] = views.map((v) => ({
       id: `view:${v.id}`,
@@ -189,6 +189,20 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       run: () => {
         const w = prompt('Today (week number)', String(store.project.meta.today ?? 0))
         if (w !== null) store.updateMeta({ today: Number(w) })
+      },
+    })
+    list.push({
+      id: 'proj:close',
+      label: 'Close current project…',
+      group: 'project',
+      run: () => {
+        if (
+          confirm(
+            'Close current project? The saved project on disk is not touched — you will return to the welcome screen.',
+          )
+        ) {
+          store.closeCurrentProject()
+        }
       },
     })
 

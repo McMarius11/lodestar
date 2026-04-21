@@ -369,7 +369,6 @@ function DescriptionField({
   onCommit: (v: string) => void
 }) {
   const [draft, setDraft] = useState(value)
-  const [mode, setMode] = useState<'write' | 'preview'>(value ? 'preview' : 'write')
 
   useEffect(() => {
     setDraft(value)
@@ -379,48 +378,21 @@ function DescriptionField({
     if (draft !== value) onCommit(draft)
   }
 
-  if (mode === 'preview' && draft) {
-    return (
-      <div className="mt-3">
-        <div
-          onClick={() => setMode('write')}
-          className="cursor-text text-sm text-fg-muted whitespace-pre-wrap border-l-2 border-line/60 pl-3 hover:border-accent transition-colors"
-          title="Click to edit"
-          dangerouslySetInnerHTML={{ __html: renderInlineMd(draft) }}
-        />
-        <button
-          onClick={() => setMode('write')}
-          className="label-mono text-fg-subtle hover:text-fg mt-1"
-        >
-          EDIT
-        </button>
-      </div>
-    )
-  }
-
   return (
     <div className="mt-3">
       <textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          commit()
-          if (draft) setMode('preview')
-        }}
+        onBlur={commit}
         placeholder="Description — plain text or minimal markdown (**bold** _italic_ `code`)…"
         rows={3}
         className="w-full bg-sunken/30 border border-line/40 focus:border-accent px-3 py-2 text-sm outline-none resize-y placeholder:text-fg-subtle"
       />
       {draft && (
-        <button
-          onClick={() => {
-            commit()
-            setMode('preview')
-          }}
-          className="label-mono text-fg-subtle hover:text-fg mt-1"
-        >
-          PREVIEW
-        </button>
+        <div
+          className="mt-2 text-xs text-fg-muted whitespace-pre-wrap border-l-2 border-line/60 pl-3"
+          dangerouslySetInnerHTML={{ __html: renderInlineMd(draft) }}
+        />
       )}
     </div>
   )
