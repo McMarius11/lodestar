@@ -1,23 +1,20 @@
 import { useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useProjectStore } from '@/store/useProjectStore'
+import { useFilteredFeatures } from '@/hooks/useFilteredFeatures'
 import {
   blockedBy,
   completion,
   featureStatus,
   hasConflict,
   isBlocked,
-  matchesFilters,
 } from '@/lib/deps'
 import { StatusGlyph } from '@/components/StatusGlyph'
 import { EffortBadge } from '@/components/EffortBadge'
 import { ProgressBar } from '@/components/ProgressBar'
 import { useContextMenu } from '@/components/ContextMenu'
-import {
-  emptyAreaMenu,
-  featureMenu,
-  useFeatureActionsApi,
-} from '@/lib/featureActions'
+import { emptyAreaMenu, featureMenu } from '@/lib/featureActions'
+import { useFeatureActionsApi } from '@/hooks/useFeatureActionsApi'
 import type { Feature } from '@/types'
 
 function stripMd(text: string): string {
@@ -38,13 +35,9 @@ const columns: { id: ColId; label: string; tag: string }[] = [
 ]
 
 export function Kanban() {
-  const project = useProjectStore((s) => s.project)
-  const activeMs = useProjectStore((s) => s.activeMilestone)
-  const activeStatus = useProjectStore((s) => s.activeStatus)
+  const { project, modules: filteredModules } = useFilteredFeatures()
   const openDrawer = useProjectStore((s) => s.openDrawer)
-  const setAllTasksDone = useProjectStore((s) => s.setAllTasksDone)
-  const toggleTask = useProjectStore((s) => s.toggleTask)
-  const addTask = useProjectStore((s) => s.addTask)
+  const setFeatureColumn = useProjectStore((s) => s.setFeatureColumn)
   const setKanbanRank = useProjectStore((s) => s.setKanbanRank)
   const normalizeKanbanRanks = useProjectStore((s) => s.normalizeKanbanRanks)
   const [sortBy, setSortBy] = useState<'module' | 'effort' | 'milestone'>('module')
@@ -54,15 +47,14 @@ export function Kanban() {
   const ctx = useContextMenu()
   const api = useFeatureActionsApi()
 
-  const withMods = useMemo(() => {
+  const filtered = useMemo(() => {
     const out: (Feature & { modColor: string; modLabel: string })[] = []
-    for (const m of project.modules)
-      for (const f of m.features)
+    for (const { module: m, features } of filteredModules)
+      for (const f of features)
         out.push({ ...f, modColor: m.color, modLabel: m.label })
     return out
-  }, [project])
+  }, [filteredModules])
 
-  const filtered = withMods.filter((f) => matchesFilters(project, f, activeMs, activeStatus))
   const tieBreak = (a: Feature & { modLabel: string }, b: Feature & { modLabel: string }) => {
     if (sortBy === 'module') return a.modLabel.localeCompare(b.modLabel)
     if (sortBy === 'effort') {
@@ -85,27 +77,6 @@ export function Kanban() {
     done: sortBucket(filtered.filter((f) => featureStatus(f) === 'done')),
   }
 
-  const moveTo = (featureId: string, col: ColId) => {
-    const feat = withMods.find((f) => f.id === featureId)
-    if (!feat) return
-    const current = featureStatus(feat)
-    if (current === col) return
-    if (col === 'done') setAllTasksDone(featureId, true)
-    else if (col === 'backlog') setAllTasksDone(featureId, false)
-    else {
-      // progress: ensure at least one task exists & marked done, and at least one still open
-      if (feat.tasks.length === 0) {
-        addTask(featureId, 'Kickoff')
-      } else if (current === 'backlog') {
-        const first = feat.tasks[0]
-        if (first) toggleTask(featureId, first.id)
-      } else if (current === 'done') {
-        const last = feat.tasks[feat.tasks.length - 1]
-        if (last) toggleTask(featureId, last.id)
-      }
-    }
-  }
-
   const rankBetween = (
     col: ColId,
     beforeId: string | null,
@@ -126,12 +97,16 @@ export function Kanban() {
 
   const handleDrop = (col: ColId, beforeId: string | null) => {
     if (!dragId) return
-    const feat = withMods.find((f) => f.id === dragId)
+    const feat = filtered.find((f) => f.id === dragId)
     if (!feat) return
     const current = featureStatus(feat)
-    if (current !== col) moveTo(dragId, col)
     const newRank = rankBetween(col, beforeId, dragId)
-    setKanbanRank(dragId, newRank)
+    if (current !== col) {
+      // one history step for column + rank together
+      setFeatureColumn(dragId, col, newRank)
+    } else {
+      setKanbanRank(dragId, newRank)
+    }
     // detect float-drift and renormalize
     const nextList = buckets[col]
     for (let i = 1; i < nextList.length; i++) {

@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useProjectStore } from '@/store/useProjectStore'
+import { useFilteredFeatures } from '@/hooks/useFilteredFeatures'
 import {
   featureIndex,
   featureStatus,
   hasConflict,
   isBlocked,
-  matchesFilters,
 } from '@/lib/deps'
-import type { Feature, Module } from '@/types'
+import type { Dep, Feature } from '@/types'
 import { useContextMenu } from '@/components/ContextMenu'
-import { featureMenu, useFeatureActionsApi } from '@/lib/featureActions'
-
-type Point = { x: number; y: number }
+import { emptyAreaMenu, featureMenu } from '@/lib/featureActions'
+import { useFeatureActionsApi } from '@/hooks/useFeatureActionsApi'
+import { useMindmapLayout, type Point } from '@/hooks/useMindmapLayout'
 
 const W = 1400
 const H = 900
@@ -19,9 +19,8 @@ const CX = W / 2
 const CY = H / 2
 
 export function MindMap() {
-  const project = useProjectStore((s) => s.project)
-  const activeMs = useProjectStore((s) => s.activeMilestone)
-  const activeStatus = useProjectStore((s) => s.activeStatus)
+  const { project, modules: filteredModules, activeMilestone: activeMs, activeStatus } =
+    useFilteredFeatures()
   const openDrawer = useProjectStore((s) => s.openDrawer)
   const overrides = useProjectStore((s) => s.mindmapOverrides)
   const setOverride = useProjectStore((s) => s.setMindmapOverride)
@@ -42,8 +41,18 @@ export function MindMap() {
     dy: number
     moved: boolean
   } | null>(null)
+  const [connect, setConnect] = useState<{
+    fromId: string
+    fromX: number
+    fromY: number
+    x: number
+    y: number
+  } | null>(null)
+  const openDepEditor = useProjectStore((s) => s.openDepEditor)
+  const removeDep = useProjectStore((s) => s.removeDep)
 
   const svgRef = useRef<SVGSVGElement>(null)
+  const featPointMapRef = useRef<Map<string, Point>>(new Map())
   const [scale, setScale] = useState(1)
   const [tx, setTx] = useState(0)
   const [ty, setTy] = useState(0)
@@ -92,21 +101,40 @@ export function MindMap() {
     [scale, tx, ty],
   )
 
+  const clientToWorld = useCallback(
+    (clientX: number, clientY: number) => {
+      const svg = svgRef.current
+      if (!svg) return { x: 0, y: 0 }
+      const rect = svg.getBoundingClientRect()
+      const svgX = ((clientX - rect.left) / rect.width) * W
+      const svgY = ((clientY - rect.top) / rect.height) * H
+      return { x: (svgX - tx) / scale, y: (svgY - ty) / scale }
+    },
+    [tx, ty, scale],
+  )
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
-      if (nodeDrag) return
+      if (nodeDrag || connect) return
       // only pan on empty background, not on nodes (nodes handle their own pointerdown)
       panRef.current = true
       setPanning(true)
       pointerStart.current = { x: e.clientX, y: e.clientY, tx, ty }
       ;(e.target as Element).setPointerCapture?.(e.pointerId)
     },
-    [tx, ty, nodeDrag],
+    [tx, ty, nodeDrag, connect],
   )
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
+      if (connect) {
+        const p = clientToWorld(e.clientX, e.clientY)
+        if (p.x !== connect.x || p.y !== connect.y) {
+          setConnect({ ...connect, x: p.x, y: p.y })
+        }
+        return
+      }
       if (nodeDrag) {
         const svg = svgRef.current
         if (!svg) return
@@ -132,11 +160,41 @@ export function MindMap() {
       setTx(pointerStart.current.tx + dx)
       setTy(pointerStart.current.ty + dy)
     },
-    [nodeDrag, scale],
+    [nodeDrag, connect, clientToWorld, scale],
+  )
+
+  const hitTestFeature = useCallback(
+    (worldX: number, worldY: number, excludeId: string): string | null => {
+      let bestId: string | null = null
+      let bestDist = Infinity
+      featPointMapRef.current.forEach((p, id) => {
+        if (id === excludeId) return
+        const d = Math.hypot(p.x - worldX, p.y - worldY)
+        if (d > 18) return
+        if (d < bestDist) {
+          bestDist = d
+          bestId = id
+        }
+      })
+      return bestId
+    },
+    [],
   )
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent) => {
+      if (connect) {
+        const hitId = hitTestFeature(connect.x, connect.y, connect.fromId)
+        ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+        if (hitId) {
+          openDepEditor(connect.fromId, hitId, {
+            x: e.clientX - 150,
+            y: e.clientY + 10,
+          })
+        }
+        setConnect(null)
+        return
+      }
       if (nodeDrag) {
         if (nodeDrag.moved) {
           setOverride(nodeDrag.id, {
@@ -154,52 +212,17 @@ export function MindMap() {
       setPanning(false)
       pointerStart.current = null
     },
-    [nodeDrag, setOverride, openDrawer],
+    [nodeDrag, connect, hitTestFeature, openDepEditor, setOverride, openDrawer],
   )
 
-  const modules = project.modules
-    .map((m) => ({
-      ...m,
-      features: m.features.filter((f) =>
-        matchesFilters(project, f, activeMs, activeStatus),
-      ),
-    }))
+  const modules = filteredModules
+    .map(({ module: m, features }) => ({ ...m, features }))
     .filter(
       (m) =>
         m.features.length > 0 || (activeMs === 'all' && activeStatus === 'all'),
     )
 
-  const layout = useMemo(() => {
-    const modCount = Math.max(modules.length, 1)
-    const modRadius = modCount <= 4 ? 210 : modCount <= 6 ? 240 : 270
-    const featRadius = modCount <= 4 ? 160 : modCount <= 6 ? 140 : 120
-    // Each module gets a sector of the circle; features spread within ~60% of it
-    const sectorSize = (Math.PI * 2) / modCount
-    const spreadBudget = sectorSize * 0.6
-    const modPoints: { mod: Module; center: Point; features: { feat: Feature; point: Point }[] }[] = []
-    modules.forEach((m, i) => {
-      const angle = (i / modCount) * Math.PI * 2 - Math.PI / 2
-      const center = {
-        x: CX + Math.cos(angle) * modRadius,
-        y: CY + Math.sin(angle) * modRadius,
-      }
-      const fCount = m.features.length
-      const step =
-        fCount <= 1 ? 0 : Math.min(0.26, spreadBudget / Math.max(fCount - 1, 1))
-      const features = m.features.map((f, j) => {
-        const subAngle = angle + (j - (fCount - 1) / 2) * step
-        return {
-          feat: f,
-          point: {
-            x: center.x + Math.cos(subAngle) * featRadius,
-            y: center.y + Math.sin(subAngle) * featRadius,
-          },
-        }
-      })
-      modPoints.push({ mod: m, center, features })
-    })
-    return modPoints
-  }, [modules])
+  const layout = useMindmapLayout(modules, { width: W, height: H })
 
   const idx = featureIndex(project)
 
@@ -223,8 +246,18 @@ export function MindMap() {
       featPointMap.set(fp.feat.id, resolvePoint(fp.feat.id, fp.point))
     }
   }
+  featPointMapRef.current = featPointMap
 
-  const depLines: { from: Point; to: Point; conflict: boolean }[] = []
+  type DepLine = {
+    from: Point
+    to: Point
+    conflict: boolean
+    sourceFeatureId: string
+    depId: string
+    reason: string
+    type: Dep['type']
+  }
+  const depLines: DepLine[] = []
   for (const mp of layout) {
     for (const fp of mp.features) {
       const fromPoint = featPointMap.get(fp.feat.id)
@@ -238,6 +271,10 @@ export function MindMap() {
           from: targetPoint,
           to: fromPoint,
           conflict: hasConflict(project, fp.feat),
+          sourceFeatureId: fp.feat.id,
+          depId: d.id,
+          reason: d.reason,
+          type: d.type,
         })
       }
     }
@@ -260,7 +297,14 @@ export function MindMap() {
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
         onDoubleClick={resetView}
-        style={{ touchAction: 'none', cursor: panning ? 'grabbing' : 'grab' }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          ctx.openAt(e.clientX, e.clientY, emptyAreaMenu(api, { kind: 'mindmap-empty' }))
+        }}
+        style={{
+          touchAction: 'none',
+          cursor: connect ? 'crosshair' : panning ? 'grabbing' : 'grab',
+        }}
       >
         <svg
           ref={svgRef}
@@ -313,18 +357,72 @@ export function MindMap() {
 
           {/* dep lines */}
           {depLines.map((l, i) => (
-            <line
-              key={`dep-${i}`}
-              x1={l.from.x}
-              y1={l.from.y}
-              x2={l.to.x}
-              y2={l.to.y}
-              stroke={l.conflict ? 'rgb(var(--danger))' : 'rgb(var(--fg-subtle))'}
-              strokeOpacity={l.conflict ? 0.5 : 0.18}
-              strokeWidth={l.conflict ? 1.2 : 0.6}
-              strokeDasharray="4 4"
-            />
+            <g key={`dep-${i}`}>
+              <line
+                x1={l.from.x}
+                y1={l.from.y}
+                x2={l.to.x}
+                y2={l.to.y}
+                stroke={l.conflict ? 'rgb(var(--danger))' : 'rgb(var(--fg-subtle))'}
+                strokeOpacity={l.conflict ? 0.5 : 0.18}
+                strokeWidth={l.conflict ? 1.2 : 0.6}
+                strokeDasharray="4 4"
+                style={{ pointerEvents: 'none' }}
+              />
+              {/* invisible thicker hit line for right-click */}
+              <line
+                x1={l.from.x}
+                y1={l.from.y}
+                x2={l.to.x}
+                y2={l.to.y}
+                stroke="transparent"
+                strokeWidth={12}
+                style={{ pointerEvents: 'stroke', cursor: 'context-menu' }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  ctx.openAt(e.clientX, e.clientY, [
+                    {
+                      kind: 'label',
+                      label: `${l.sourceFeatureId} → ${l.depId} (${l.type})`,
+                    },
+                    ...(l.reason
+                      ? ([{ kind: 'label', label: l.reason }] as const)
+                      : []),
+                    { kind: 'separator' },
+                    {
+                      kind: 'action',
+                      label: 'Remove dependency',
+                      danger: true,
+                      run: () => removeDep(l.sourceFeatureId, l.depId),
+                    },
+                  ])
+                }}
+              />
+            </g>
           ))}
+
+          {/* live connect line while shift-dragging */}
+          {connect && (
+            <g style={{ pointerEvents: 'none' }}>
+              <line
+                x1={connect.fromX}
+                y1={connect.fromY}
+                x2={connect.x}
+                y2={connect.y}
+                stroke="rgb(var(--accent))"
+                strokeWidth={1.5}
+                strokeDasharray="3 3"
+              />
+              <circle
+                cx={connect.x}
+                cy={connect.y}
+                r={4}
+                fill="rgb(var(--accent))"
+                fillOpacity={0.8}
+              />
+            </g>
+          )}
 
           {/* center */}
           <g>
@@ -398,6 +496,16 @@ export function MindMap() {
                     if (e.button !== 0) return
                     e.stopPropagation()
                     ;(e.target as Element).setPointerCapture?.(e.pointerId)
+                    if (e.shiftKey) {
+                      setConnect({
+                        fromId: fp.feat.id,
+                        fromX: p.x,
+                        fromY: p.y,
+                        x: p.x,
+                        y: p.y,
+                      })
+                      return
+                    }
                     setNodeDrag({
                       id: fp.feat.id,
                       pointerX: e.clientX,
@@ -453,7 +561,7 @@ export function MindMap() {
         {showHint && (
           <div className="absolute bottom-20 left-1/2 -translate-x-1/2 label-mono bg-base/95 border border-accent/60 px-4 py-2.5 backdrop-blur animate-pulse pointer-events-none">
             <span className="text-accent">▸</span>
-            <span className="ml-2 text-fg">Wheel zoom · Drag pan · Drag nodes · Dbl-click reset</span>
+            <span className="ml-2 text-fg">Wheel zoom · Drag pan · Drag nodes · Shift+drag to connect · Right-click for menu</span>
           </div>
         )}
 

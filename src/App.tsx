@@ -5,12 +5,14 @@ import { TopBar } from '@/components/TopBar'
 import { TaskDrawer } from '@/components/TaskDrawer'
 import { CommandPalette } from '@/components/CommandPalette'
 import { HelpOverlay } from '@/components/HelpOverlay'
+import { DepEditorPopover } from '@/components/DepEditorPopover'
+import { featureIndex } from '@/lib/deps'
 import { ValidationPanel } from '@/components/ValidationPanel'
 import { WelcomeScreen } from '@/components/WelcomeScreen'
 import { ExternalChangeBanner } from '@/components/ExternalChangeBanner'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { useKeyboardNav } from '@/lib/useKeyboardNav'
-import { useWebZoom } from '@/lib/useWebZoom'
+import { useKeyboardNav } from '@/hooks/useKeyboardNav'
+import { useWebZoom } from '@/hooks/useWebZoom'
 import { ModuleScope } from '@/views/ModuleScope'
 import { Roadmap } from '@/views/Roadmap'
 import { Kanban } from '@/views/Kanban'
@@ -85,7 +87,32 @@ export default function App() {
       <TaskDrawer />
       <CommandPalette />
       <HelpOverlay />
+      <DepEditorHost />
     </div>
+  )
+}
+
+function DepEditorHost() {
+  const depEditor = useProjectStore((s) => s.depEditor)
+  const closeDepEditor = useProjectStore((s) => s.closeDepEditor)
+  const addDep = useProjectStore((s) => s.addDep)
+  const project = useProjectStore((s) => s.project)
+  if (!depEditor) return null
+  const idx = featureIndex(project)
+  const from = idx.get(depEditor.fromId)
+  const to = idx.get(depEditor.toId)
+  if (!from || !to) return null
+  return (
+    <DepEditorPopover
+      fromFeature={from}
+      toFeature={to}
+      anchor={depEditor.anchor}
+      onCancel={closeDepEditor}
+      onSave={(dep) => {
+        addDep(depEditor.fromId, dep)
+        closeDepEditor()
+      }}
+    />
   )
 }
 

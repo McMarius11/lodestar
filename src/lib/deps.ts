@@ -26,6 +26,14 @@ export function featureIndex(project: Project): Map<string, Feature> {
   return out
 }
 
+export function findFeature(project: Project, featureId: string): Feature | null {
+  for (const m of project.modules) {
+    const f = m.features.find((x) => x.id === featureId)
+    if (f) return f
+  }
+  return null
+}
+
 export function moduleOf(project: Project, featureId: string): string | null {
   for (const m of project.modules) {
     if (m.features.some((f) => f.id === featureId)) return m.id

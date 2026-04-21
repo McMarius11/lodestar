@@ -39,7 +39,9 @@ export function TopBar() {
   const metaEditorOpen = useProjectStore((s) => s.metaEditorOpen)
   const toggleMilestoneEditor = useProjectStore((s) => s.toggleMilestoneEditor)
   const toggleMetaEditor = useProjectStore((s) => s.toggleMetaEditor)
+  const closeCurrentProject = useProjectStore((s) => s.closeCurrentProject)
   const newCtx = useContextMenu()
+  const projectCtx = useContextMenu()
 
   const { errCount, warnCount } = useMemo(() => {
     const issues = validate(project)
@@ -57,6 +59,36 @@ export function TopBar() {
     }
     const id = addFeature(firstModule.id)
     openDrawer(id)
+  }
+
+  const openProjectMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    projectCtx.openAt(rect.left, rect.bottom + 4, [
+      {
+        kind: 'action',
+        label: 'Edit project meta…',
+        run: () => toggleMetaEditor(true),
+      },
+      {
+        kind: 'action',
+        label: 'Edit milestones…',
+        run: () => toggleMilestoneEditor(true),
+      },
+      { kind: 'separator' },
+      {
+        kind: 'action',
+        label: 'Close / switch project…',
+        run: () => {
+          if (
+            confirm(
+              'Close current project? The saved file on disk is not touched — you will return to the welcome screen to pick another.',
+            )
+          ) {
+            closeCurrentProject()
+          }
+        },
+      },
+    ])
   }
 
   const openNewMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -89,23 +121,65 @@ export function TopBar() {
     <header className="relative z-20 border-b border-line/60 bg-void/80 backdrop-blur-sm">
       <div className="flex items-stretch">
         {/* Brand */}
-        <button
-          onClick={() => toggleMetaEditor(true)}
-          className="flex items-center gap-3 px-5 py-3 border-r border-line/60 min-w-[280px] text-left hover:bg-raised/30 transition-colors"
-          title="Edit project meta"
+        <div
+          className="flex items-stretch border-r border-line/60 min-w-[280px]"
+          onContextMenu={(e) => {
+            e.preventDefault()
+            projectCtx.openAt(e.clientX, e.clientY, [
+              {
+                kind: 'action',
+                label: 'Edit project meta…',
+                run: () => toggleMetaEditor(true),
+              },
+              {
+                kind: 'action',
+                label: 'Edit milestones…',
+                run: () => toggleMilestoneEditor(true),
+              },
+              { kind: 'separator' },
+              {
+                kind: 'action',
+                label: 'Close / switch project…',
+                run: () => {
+                  if (
+                    confirm(
+                      'Close current project? The saved file on disk is not touched — you will return to the welcome screen to pick another.',
+                    )
+                  ) {
+                    closeCurrentProject()
+                  }
+                },
+              },
+            ])
+          }}
         >
-          <div className="h-6 w-6 bg-accent shrink-0" aria-hidden />
-          <div className="flex flex-col leading-none">
-            <span className="ser-display text-xl italic text-fg">
-              {project.meta.name || 'Untitled'}
-            </span>
-            <span className="label-mono mt-1 flex items-center gap-2">
-              <span className="num-mono">v{project.meta.version}</span>
-              <span className="w-1 h-1 rounded-full bg-fg-subtle" />
-              <span>{source ?? '—'}</span>
-            </span>
-          </div>
-        </button>
+          <button
+            onClick={() => toggleMetaEditor(true)}
+            className="flex items-center gap-3 px-5 py-3 flex-1 text-left hover:bg-raised/30 transition-colors"
+            title="Edit project meta"
+          >
+            <BrandMark />
+
+            <div className="flex flex-col leading-none">
+              <span className="ser-display text-xl italic text-fg">
+                {project.meta.name || 'Untitled'}
+              </span>
+              <span className="label-mono mt-1 flex items-center gap-2">
+                <span className="num-mono">v{project.meta.version}</span>
+                <span className="w-1 h-1 rounded-full bg-fg-subtle" />
+                <span>{source ?? '—'}</span>
+              </span>
+            </div>
+          </button>
+          <button
+            onClick={openProjectMenu}
+            title="Project actions"
+            aria-label="Project actions"
+            className="px-2 py-3 label-mono text-fg-subtle hover:text-fg hover:bg-raised/30 transition-colors border-l border-line/30"
+          >
+            ⋮
+          </button>
+        </div>
 
         {/* Tabs */}
         <nav className="flex items-stretch flex-1 overflow-x-auto scroll-thin">
@@ -198,9 +272,40 @@ export function TopBar() {
       </div>
 
       {newCtx.menu}
+      {projectCtx.menu}
       {msEditorOpen && <MilestoneEditor onClose={() => toggleMilestoneEditor(false)} />}
       {metaEditorOpen && <ProjectMetaEditor onClose={() => toggleMetaEditor(false)} />}
     </header>
+  )
+}
+
+function BrandMark() {
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      className="h-7 w-7 shrink-0"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient id="brand-star" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FFC49B" />
+          <stop offset="55%" stopColor="#FF5A1F" />
+          <stop offset="100%" stopColor="#B8340E" />
+        </linearGradient>
+      </defs>
+      <polygon
+        points="32,6 33.53,28.31 39.42,22.58 36.32,31.47
+                58,32 36.32,32.53 39.42,41.42 33.53,35.69
+                32,58 30.47,35.69 24.58,41.42 27.68,32.53
+                6,32 27.68,31.47 24.58,22.58 30.47,28.31"
+        fill="url(#brand-star)"
+        stroke="#FF7B3F"
+        strokeOpacity="0.8"
+        strokeWidth="0.6"
+      />
+      <circle cx="32" cy="32" r="2.2" fill="rgb(var(--void))" />
+      <circle cx="32" cy="32" r="0.8" fill="#FFC49B" />
+    </svg>
   )
 }
 

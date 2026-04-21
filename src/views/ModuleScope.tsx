@@ -1,45 +1,56 @@
 import { useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useProjectStore } from '@/store/useProjectStore'
+import { useFilteredFeatures } from '@/hooks/useFilteredFeatures'
 import {
   completion,
   featureStatus,
   hasConflict,
   isBlocked,
-  matchesFilters,
 } from '@/lib/deps'
 import { StatusGlyph } from '@/components/StatusGlyph'
 import { EffortBadge } from '@/components/EffortBadge'
 import { ProgressBar } from '@/components/ProgressBar'
 import { ModuleEditor } from '@/components/ModuleEditor'
 import { useContextMenu } from '@/components/ContextMenu'
-import {
-  emptyAreaMenu,
-  featureMenu,
-  moduleMenu,
-  useFeatureActionsApi,
-} from '@/lib/featureActions'
+import { emptyAreaMenu, featureMenu, moduleMenu } from '@/lib/featureActions'
+import { useFeatureActionsApi } from '@/hooks/useFeatureActionsApi'
 import type { Feature, Module } from '@/types'
 
 export function ModuleScope() {
-  const project = useProjectStore((s) => s.project)
-  const activeMs = useProjectStore((s) => s.activeMilestone)
-  const activeStatus = useProjectStore((s) => s.activeStatus)
+  const { project, modules: filteredModules } = useFilteredFeatures()
   const addFeature = useProjectStore((s) => s.addFeature)
   const reorderModules = useProjectStore((s) => s.reorderModules)
+  const moveFeatureToModule = useProjectStore((s) => s.moveFeatureToModule)
   const ctx = useContextMenu()
   const api = useFeatureActionsApi()
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  const [dragFeatureId, setDragFeatureId] = useState<string | null>(null)
+  const [featureOverModuleId, setFeatureOverModuleId] = useState<string | null>(null)
 
-  const modules = project.modules.map((m) => ({
+  const featureHomeModuleId: string | null = (() => {
+    if (!dragFeatureId) return null
+    for (const m of project.modules) {
+      if (m.features.some((f) => f.id === dragFeatureId)) return m.id
+    }
+    return null
+  })()
+
+  const modules = filteredModules.map(({ module: m, features }) => ({
     ...m,
-    features: m.features.filter((f) =>
-      matchesFilters(project, f, activeMs, activeStatus),
-    ),
+    features,
   }))
 
   const handleDrop = (targetId: string) => {
+    if (dragFeatureId) {
+      if (featureHomeModuleId && featureHomeModuleId !== targetId) {
+        moveFeatureToModule(dragFeatureId, targetId)
+      }
+      setDragFeatureId(null)
+      setFeatureOverModuleId(null)
+      return
+    }
     if (!dragId || dragId === targetId) {
       setDragId(null)
       setOverId(null)
@@ -83,37 +94,57 @@ export function ModuleScope() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3">
-        {modules.map((m) => (
-          <ModuleCard
-            key={m.id}
-            module={m}
-            onAddFeature={() => addFeature(m.id)}
-            onContextFeature={(feat, e) =>
-              ctx.openAt(e.clientX, e.clientY, featureMenu(api, feat))
-            }
-            onContextModule={(e) =>
-              ctx.openAt(e.clientX, e.clientY, moduleMenu(api, m))
-            }
-            onContextEmpty={(e) =>
-              ctx.openAt(
-                e.clientX,
-                e.clientY,
-                emptyAreaMenu(api, { kind: 'scope-module', moduleId: m.id }),
-              )
-            }
-            dragging={dragId === m.id}
-            dragOver={overId === m.id && dragId !== null && dragId !== m.id}
-            onDragStart={() => setDragId(m.id)}
-            onDragEnter={() => {
-              if (dragId && dragId !== m.id) setOverId(m.id)
-            }}
-            onDragEnd={() => {
-              setDragId(null)
-              setOverId(null)
-            }}
-            onDrop={() => handleDrop(m.id)}
-          />
-        ))}
+        {modules.map((m) => {
+          const featureDragActive = dragFeatureId !== null
+          const isFeatureTarget =
+            featureDragActive &&
+            featureOverModuleId === m.id &&
+            featureHomeModuleId !== m.id
+          return (
+            <ModuleCard
+              key={m.id}
+              module={m}
+              onAddFeature={() => addFeature(m.id)}
+              onContextFeature={(feat, e) =>
+                ctx.openAt(e.clientX, e.clientY, featureMenu(api, feat))
+              }
+              onContextModule={(e) =>
+                ctx.openAt(e.clientX, e.clientY, moduleMenu(api, m))
+              }
+              onContextEmpty={(e) =>
+                ctx.openAt(
+                  e.clientX,
+                  e.clientY,
+                  emptyAreaMenu(api, { kind: 'scope-module', moduleId: m.id }),
+                )
+              }
+              dragging={dragId === m.id}
+              dragOver={
+                (overId === m.id && dragId !== null && dragId !== m.id) ||
+                isFeatureTarget
+              }
+              onDragStart={() => setDragId(m.id)}
+              onDragEnter={() => {
+                if (dragId && dragId !== m.id) setOverId(m.id)
+                if (featureDragActive && featureHomeModuleId !== m.id) {
+                  setFeatureOverModuleId(m.id)
+                }
+              }}
+              onDragEnd={() => {
+                setDragId(null)
+                setOverId(null)
+                setDragFeatureId(null)
+                setFeatureOverModuleId(null)
+              }}
+              onDrop={() => handleDrop(m.id)}
+              onFeatureDragStart={(id) => setDragFeatureId(id)}
+              onFeatureDragEnd={() => {
+                setDragFeatureId(null)
+                setFeatureOverModuleId(null)
+              }}
+            />
+          )
+        })}
       </div>
       {ctx.menu}
     </div>
@@ -170,6 +201,8 @@ function ModuleCard({
   onDragEnter,
   onDragEnd,
   onDrop,
+  onFeatureDragStart,
+  onFeatureDragEnd,
 }: {
   module: Module
   onAddFeature: () => void
@@ -182,6 +215,8 @@ function ModuleCard({
   onDragEnter: () => void
   onDragEnd: () => void
   onDrop: () => void
+  onFeatureDragStart: (id: string) => void
+  onFeatureDragEnd: () => void
 }) {
   const openDrawer = useProjectStore((s) => s.openDrawer)
   const project = useProjectStore((s) => s.project)
@@ -282,6 +317,17 @@ function ModuleCard({
           return (
             <li
               key={f.id}
+              draggable
+              onDragStart={(e) => {
+                e.stopPropagation()
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/lodestar-feature', f.id)
+                onFeatureDragStart(f.id)
+              }}
+              onDragEnd={(e) => {
+                e.stopPropagation()
+                onFeatureDragEnd()
+              }}
               onContextMenu={(e) => {
                 e.preventDefault()
                 e.stopPropagation()

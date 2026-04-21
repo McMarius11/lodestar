@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="s" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#FFC49B"/>
+      <stop offset="55%" stop-color="#FF5A1F"/>
+      <stop offset="100%" stop-color="#B8340E"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" fill="#0A0A0C" rx="10"/>
+  <!-- 8-point compass star, center (32,32), R_major=26, R_minor=10.5, r_inner=4 -->
+  <polygon
+    points="32,6 33.53,28.31 39.42,22.58 36.32,31.47
+            58,32 36.32,32.53 39.42,41.42 33.53,35.69
+            32,58 30.47,35.69 24.58,41.42 27.68,32.53
+            6,32 27.68,31.47 24.58,22.58 30.47,28.31"
+    fill="url(#s)"
+    stroke="#FF7B3F" stroke-opacity="0.8" stroke-width="0.6"
+  />
+  <circle cx="32" cy="32" r="2.2" fill="#0A0A0C"/>
+  <circle cx="32" cy="32" r="0.8" fill="#FFC49B"/>
+</svg>

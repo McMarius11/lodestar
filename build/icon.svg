@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#FF5A1F" stop-opacity="0.42"/>
+      <stop offset="35%" stop-color="#FF5A1F" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#FF5A1F" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="starFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#FFC49B"/>
+      <stop offset="55%" stop-color="#FF5A1F"/>
+      <stop offset="100%" stop-color="#B8340E"/>
+    </linearGradient>
+    <linearGradient id="minorFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#FF7B4A"/>
+      <stop offset="100%" stop-color="#9A2C0D"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Void background -->
+  <rect width="1024" height="1024" fill="#0A0A0C"/>
+
+  <!-- Radial halo behind star -->
+  <circle cx="512" cy="500" r="500" fill="url(#halo)"/>
+
+  <!-- Horizon line -->
+  <line x1="150" y1="870" x2="874" y2="870"
+        stroke="#F5F2E8" stroke-opacity="0.32" stroke-width="2"/>
+  <!-- Horizon tick (cardinal marker) -->
+  <line x1="512" y1="864" x2="512" y2="876"
+        stroke="#F5F2E8" stroke-opacity="0.55" stroke-width="2"/>
+
+  <!-- Minor diagonals (underneath main star) -->
+  <polygon
+    points="512,200 555,469 780,244 543,481
+            824,500 543,519 780,756 555,531
+            512,800 469,531 244,756 481,519
+            200,500 481,481 244,244 469,469"
+    fill="url(#minorFill)"
+    fill-opacity="0.45"
+  />
+
+  <!-- Main 8-point compass star (major N/E/S/W + minor NE/SE/SW/NW) -->
+  <polygon
+    points="512,172 533.05,461.19 611,413 562.81,490.95
+            852,512 562.81,533.05 611,611 533.05,562.81
+            512,852 490.95,562.81 413,611 461.19,533.05
+            172,512 461.19,490.95 413,413 490.95,461.19"
+    fill="url(#starFill)"
+    stroke="#FF7B3F"
+    stroke-opacity="0.9"
+    stroke-width="1.5"
+    stroke-linejoin="miter"
+  />
+
+  <!-- Inner center detail -->
+  <circle cx="512" cy="512" r="22" fill="#0A0A0C"/>
+  <circle cx="512" cy="512" r="14" fill="none"
+          stroke="#FFC49B" stroke-opacity="0.7" stroke-width="1.25"/>
+  <circle cx="512" cy="512" r="4" fill="#FFC49B"/>
+</svg>
