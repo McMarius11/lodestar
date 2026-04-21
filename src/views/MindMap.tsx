@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useProjectStore } from '@/store/useProjectStore'
 import {
   featureIndex,
@@ -22,6 +22,73 @@ export function MindMap() {
   const activeStatus = useProjectStore((s) => s.activeStatus)
   const openDrawer = useProjectStore((s) => s.openDrawer)
   const [hover, setHover] = useState<string | null>(null)
+
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [scale, setScale] = useState(1)
+  const [tx, setTx] = useState(0)
+  const [ty, setTy] = useState(0)
+  const [panning, setPanning] = useState(false)
+  const panRef = useRef(false)
+  const pointerStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
+
+  const resetView = useCallback(() => {
+    setScale(1)
+    setTx(0)
+    setTy(0)
+  }, [])
+
+  const onWheel = useCallback(
+    (e: React.WheelEvent) => {
+      // SVG coordinates under the cursor should stay put across the zoom.
+      const svg = svgRef.current
+      if (!svg) return
+      const rect = svg.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      // Convert viewport px to SVG user coords (W × H viewBox).
+      const sx = (cx / rect.width) * W
+      const sy = (cy / rect.height) * H
+      const delta = -e.deltaY * 0.0015
+      const next = Math.min(3, Math.max(0.3, scale * Math.exp(delta)))
+      // point = tx + scale*svgPt  →  keep svgPt under cursor stable
+      const svgPtX = (sx - tx) / scale
+      const svgPtY = (sy - ty) / scale
+      setTx(sx - svgPtX * next)
+      setTy(sy - svgPtY * next)
+      setScale(next)
+    },
+    [scale, tx, ty],
+  )
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0) return
+      panRef.current = true
+      setPanning(true)
+      pointerStart.current = { x: e.clientX, y: e.clientY, tx, ty }
+      ;(e.target as Element).setPointerCapture?.(e.pointerId)
+    },
+    [tx, ty],
+  )
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!panRef.current || !pointerStart.current) return
+    const svg = svgRef.current
+    if (!svg) return
+    const rect = svg.getBoundingClientRect()
+    const scaleX = W / rect.width
+    const scaleY = H / rect.height
+    const dx = (e.clientX - pointerStart.current.x) * scaleX
+    const dy = (e.clientY - pointerStart.current.y) * scaleY
+    setTx(pointerStart.current.tx + dx)
+    setTy(pointerStart.current.ty + dy)
+  }, [])
+
+  const onPointerUp = useCallback(() => {
+    panRef.current = false
+    setPanning(false)
+    pointerStart.current = null
+  }, [])
 
   const modules = project.modules
     .map((m) => ({
@@ -96,12 +163,23 @@ export function MindMap() {
         <h1 className="ser-display text-6xl italic leading-none">constellation</h1>
       </div>
 
-      <div className="flex-1 min-h-0 grain relative overflow-hidden">
+      <div
+        className="flex-1 min-h-0 grain relative overflow-hidden"
+        onWheel={onWheel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+        onDoubleClick={resetView}
+        style={{ touchAction: 'none', cursor: panning ? 'grabbing' : 'grab' }}
+      >
         <svg
+          ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
-          className="w-full h-full"
+          className="w-full h-full select-none"
           preserveAspectRatio="xMidYMid meet"
         >
+          <g transform={`translate(${tx} ${ty}) scale(${scale})`}>
           <defs>
             <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.12" />
@@ -247,6 +325,7 @@ export function MindMap() {
               )
             }),
           )}
+          </g>
         </svg>
 
         {/* legend */}
@@ -256,6 +335,20 @@ export function MindMap() {
           <LegendDot color="bg-void border border-line-strong" label="backlog" />
           <LegendDot color="bg-warn" label="blocked" />
           <LegendDot color="bg-danger" label="conflict" />
+        </div>
+
+        {/* zoom controls */}
+        <div className="absolute bottom-6 right-6 flex items-center gap-2 label-mono bg-base/80 border border-line/60 px-3 py-2 backdrop-blur">
+          <span className="num-mono text-fg-subtle">
+            {Math.round(scale * 100)}%
+          </span>
+          <button
+            onClick={resetView}
+            className="text-fg-muted hover:text-fg"
+            title="Reset view (double-click)"
+          >
+            RESET
+          </button>
         </div>
       </div>
     </div>

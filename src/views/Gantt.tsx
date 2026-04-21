@@ -101,6 +101,34 @@ export function Gantt() {
     setWeekW((w) => Math.min(WEEK_W_MAX, Math.max(WEEK_W_MIN, w + delta)))
   }
 
+  // Ctrl+wheel zooms around the cursor instead of letting the global UI
+  // zoom take over — Gantt runs its own discrete pixel-per-week scale.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      e.preventDefault()
+      e.stopPropagation()
+      const delta = e.deltaY > 0 ? -8 : 8
+      const rect = el.getBoundingClientRect()
+      const cursorInContent = e.clientX - rect.left + el.scrollLeft
+      const weekUnderCursor = (cursorInContent - LABEL_W) / WEEK_W
+      setWeekW((prev) => {
+        const next = Math.min(WEEK_W_MAX, Math.max(WEEK_W_MIN, prev + delta))
+        if (next === prev) return prev
+        requestAnimationFrame(() => {
+          if (!scrollRef.current) return
+          scrollRef.current.scrollLeft =
+            weekUnderCursor * next + LABEL_W - (e.clientX - rect.left)
+        })
+        return next
+      })
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [WEEK_W])
+
   return (
     <div className="h-full flex flex-col">
       <div className="px-8 pt-8 pb-4 border-b border-line/40 flex items-end justify-between gap-6">

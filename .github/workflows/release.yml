@@ -7,13 +7,38 @@ on:
   workflow_dispatch:
 
 jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   build:
     name: Build (${{ matrix.os }})
+    needs: [typecheck, test]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v6
@@ -41,7 +66,8 @@ jobs:
           path: |
             release/*.AppImage
             release/*.exe
-          if-no-files-found: error
+            release/*.dmg
+          if-no-files-found: warn
           retention-days: 7
 
   release:
@@ -66,5 +92,6 @@ jobs:
           files: |
             dist-artifacts/*.AppImage
             dist-artifacts/*.exe
+            dist-artifacts/*.dmg
           draft: false
           generate_release_notes: true

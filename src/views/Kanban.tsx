@@ -14,6 +14,15 @@ import { EffortBadge } from '@/components/EffortBadge'
 import { ProgressBar } from '@/components/ProgressBar'
 import type { Feature } from '@/types'
 
+function stripMd(text: string): string {
+  return text
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 type ColId = 'backlog' | 'progress' | 'done'
 
 const columns: { id: ColId; label: string; tag: string }[] = [
@@ -235,6 +244,14 @@ function KanbanCard({
             <span className="text-sm text-fg leading-snug">{f.label}</span>
             <EffortBadge effort={f.effort} className="shrink-0" />
           </div>
+          {f.description && (
+            <p
+              className="mt-1.5 text-xs text-fg-muted leading-snug line-clamp-2"
+              title={f.description}
+            >
+              {stripMd(f.description)}
+            </p>
+          )}
           <div className="label-mono flex items-center gap-2 mt-2">
             <span className="text-fg-muted">{modLabel}</span>
             <span className="text-fg-subtle">·</span>

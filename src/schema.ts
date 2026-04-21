@@ -18,6 +18,7 @@ export const DepSchema = z.object({
 export const FeatureSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
+  description: z.string().optional(),
   effort: EffortSchema,
   ms: z.string().min(1),
   ganttStart: z.number().int().nonnegative(),
@@ -38,11 +39,13 @@ export const MilestoneSchema = z.object({
   label: z.string(),
 })
 
+export const CURRENT_SCHEMA_VERSION = 2
+
 export const ProjectMetaSchema = z.object({
   name: z.string(),
   description: z.string(),
   version: z.string(),
-  schemaVersion: z.number().int().default(1),
+  schemaVersion: z.number().int().default(CURRENT_SCHEMA_VERSION),
   milestones: z.array(MilestoneSchema),
   today: z.number().int().nonnegative().optional(),
 })
@@ -80,7 +83,7 @@ export function migrate(raw: unknown): ProjectParsed {
       name: meta.name ?? 'Untitled Project',
       description: meta.description ?? '',
       version: meta.version ?? '0.1.0',
-      schemaVersion: meta.schemaVersion ?? 1,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       milestones,
       today: meta.today,
     },
@@ -91,6 +94,7 @@ export function migrate(raw: unknown): ProjectParsed {
       features: (m.features ?? []).map((f: any) => ({
         id: f.id,
         label: f.label,
+        description: typeof f.description === 'string' ? f.description : '',
         effort: f.effort,
         ms: f.ms,
         ganttStart: f.ganttStart ?? 0,

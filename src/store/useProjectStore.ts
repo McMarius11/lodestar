@@ -4,10 +4,13 @@ import type { Dep, Feature, Module, Project, Task, ViewId } from '@/types'
 import {
   exportProject,
   importProject,
+  importProjectFromText,
   loadProject,
   saveProject,
   subscribeExternalChange,
 } from '@/lib/persistence'
+import { migrate } from '@/schema'
+import { sampleProject } from '@/data/sample'
 import { newId, slugId } from '@/lib/id'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -17,7 +20,8 @@ export type StatusFilter = 'all' | 'ready' | 'blocked' | 'conflict'
 type State = {
   project: Project
   loaded: boolean
-  source: 'disk' | 'localStorage' | 'sample' | null
+  source: 'disk' | 'localStorage' | 'sample' | 'none' | null
+  externalChangePending: boolean
   activeView: ViewId
   activeMilestone: string | 'all'
   activeStatus: StatusFilter
@@ -25,6 +29,8 @@ type State = {
   drawerFeatureId: string | null
   paletteOpen: boolean
   helpOpen: boolean
+  msEditorOpen: boolean
+  metaEditorOpen: boolean
   saveStatus: SaveStatus
   savedAt: number | null
   history: Project[]
@@ -40,6 +46,8 @@ type Actions = {
   openDrawer: (id: string | null) => void
   togglePalette: (open?: boolean) => void
   toggleHelp: (open?: boolean) => void
+  toggleMilestoneEditor: (open?: boolean) => void
+  toggleMetaEditor: (open?: boolean) => void
   setAllTasksDone: (featureId: string, done: boolean) => void
 
   toggleTask: (featureId: string, taskId: string) => void
@@ -58,6 +66,7 @@ type Actions = {
   addModule: (partial?: Partial<Module>) => string
   updateModule: (moduleId: string, patch: Partial<Module>) => void
   deleteModule: (moduleId: string) => void
+  reorderModules: (ids: string[]) => void
 
   updateMeta: (patch: Partial<Project['meta']>) => void
   addMilestone: (id: string, label: string) => void
@@ -69,6 +78,11 @@ type Actions = {
 
   exportFile: () => Promise<void>
   importFile: () => Promise<void>
+  importFromText: (text: string) => boolean
+  loadSample: () => void
+  startEmptyProject: (name: string) => void
+  reloadFromDisk: () => Promise<void>
+  dismissExternalChange: () => void
 
   _pushHistory: () => void
   _persist: () => void
@@ -91,6 +105,7 @@ export const useProjectStore = create<State & Actions>()(
     },
     loaded: false,
     source: null,
+    externalChangePending: false,
     activeView: 'scope',
     activeMilestone: 'all',
     activeStatus: 'all',
@@ -98,26 +113,92 @@ export const useProjectStore = create<State & Actions>()(
     drawerFeatureId: null,
     paletteOpen: false,
     helpOpen: false,
+    msEditorOpen: false,
+    metaEditorOpen: false,
     saveStatus: 'idle',
     savedAt: null,
     history: [],
     future: [],
 
     init: async () => {
-      const { project, source } = await loadProject()
+      const loaded = await loadProject()
       set((s) => {
-        s.project = project
+        if (loaded.status === 'ok') {
+          s.project = loaded.project
+          s.source = loaded.source
+        } else {
+          s.source = 'none'
+        }
         s.loaded = true
-        s.source = source
       })
       subscribeExternalChange(async () => {
-        const { project: p } = await loadProject()
-        set((s) => {
-          s.project = p
-          s.saveStatus = 'saved'
-          s.savedAt = Date.now()
-        })
+        const st = get()
+        const userEditing =
+          st.drawerFeatureId !== null || st.paletteOpen || isInputFocused()
+        if (userEditing) {
+          set((s) => void (s.externalChangePending = true))
+          return
+        }
+        await get().reloadFromDisk()
       })
+    },
+
+    reloadFromDisk: async () => {
+      const loaded = await loadProject()
+      if (loaded.status !== 'ok') return
+      set((s) => {
+        s.project = loaded.project
+        s.source = loaded.source
+        s.saveStatus = 'saved'
+        s.savedAt = Date.now()
+        s.externalChangePending = false
+      })
+    },
+
+    dismissExternalChange: () => {
+      set((s) => void (s.externalChangePending = false))
+      get()._persist()
+    },
+
+    importFromText: (text) => {
+      const p = importProjectFromText(text)
+      if (!p) return false
+      get()._pushHistory()
+      set((s) => {
+        s.project = p
+        s.source = 'disk'
+      })
+      get()._persist()
+      return true
+    },
+
+    loadSample: () => {
+      const p = migrate(sampleProject)
+      get()._pushHistory()
+      set((s) => {
+        s.project = p
+        s.source = 'disk'
+      })
+      get()._persist()
+    },
+
+    startEmptyProject: (name) => {
+      const empty: Project = {
+        meta: {
+          name: name || 'Untitled Project',
+          description: '',
+          version: '0.1.0',
+          schemaVersion: 2,
+          milestones: [{ id: 'v0.1', label: 'v0.1' }],
+        },
+        modules: [],
+      }
+      get()._pushHistory()
+      set((s) => {
+        s.project = empty
+        s.source = 'disk'
+      })
+      get()._persist()
     },
 
     setActiveView: (v) => set((s) => void (s.activeView = v)),
@@ -129,6 +210,10 @@ export const useProjectStore = create<State & Actions>()(
       set((s) => void (s.paletteOpen = open ?? !s.paletteOpen)),
     toggleHelp: (open) =>
       set((s) => void (s.helpOpen = open ?? !s.helpOpen)),
+    toggleMilestoneEditor: (open) =>
+      set((s) => void (s.msEditorOpen = open ?? !s.msEditorOpen)),
+    toggleMetaEditor: (open) =>
+      set((s) => void (s.metaEditorOpen = open ?? !s.metaEditorOpen)),
 
     setAllTasksDone: (featureId, done) => {
       get()._pushHistory()
@@ -337,6 +422,23 @@ export const useProjectStore = create<State & Actions>()(
       get()._persist()
     },
 
+    reorderModules: (ids) => {
+      const current = get().project.modules
+      const byId = new Map(current.map((m) => [m.id, m]))
+      const next: Module[] = []
+      for (const id of ids) {
+        const m = byId.get(id)
+        if (m) next.push(m)
+      }
+      for (const m of current) {
+        if (!ids.includes(m.id)) next.push(m)
+      }
+      if (next.length !== current.length) return
+      get()._pushHistory()
+      set((s) => void (s.project.modules = next))
+      get()._persist()
+    },
+
     updateMeta: (patch) => {
       get()._pushHistory()
       set((s) => void Object.assign(s.project.meta, patch))
@@ -413,7 +515,10 @@ export const useProjectStore = create<State & Actions>()(
       const imported = await importProject()
       if (!imported) return
       get()._pushHistory()
-      set((s) => void (s.project = imported))
+      set((s) => {
+        s.project = imported
+        s.source = 'disk'
+      })
       get()._persist()
     },
 
@@ -427,6 +532,7 @@ export const useProjectStore = create<State & Actions>()(
     },
 
     _persist: () => {
+      if (get().source === 'none') return
       set((s) => void (s.saveStatus = 'saving'))
       if (saveTimer) clearTimeout(saveTimer)
       saveTimer = setTimeout(async () => {
@@ -444,3 +550,16 @@ export const useProjectStore = create<State & Actions>()(
     },
   })),
 )
+
+function isInputFocused(): boolean {
+  if (typeof document === 'undefined') return false
+  const el = document.activeElement
+  if (!el) return false
+  const tag = el.tagName
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    (el as HTMLElement).isContentEditable
+  )
+}
