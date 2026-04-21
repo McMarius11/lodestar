@@ -25,6 +25,7 @@ export const FeatureSchema = z.object({
   ganttEnd: z.number().int().nonnegative(),
   deps: z.array(DepSchema),
   tasks: z.array(TaskSchema),
+  rank: z.number().optional(),
 })
 
 export const ModuleSchema = z.object({
@@ -39,7 +40,12 @@ export const MilestoneSchema = z.object({
   label: z.string(),
 })
 
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
+
+export const PointSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+})
 
 export const ProjectMetaSchema = z.object({
   name: z.string(),
@@ -48,6 +54,7 @@ export const ProjectMetaSchema = z.object({
   schemaVersion: z.number().int().default(CURRENT_SCHEMA_VERSION),
   milestones: z.array(MilestoneSchema),
   today: z.number().int().nonnegative().optional(),
+  mindmapPositions: z.record(PointSchema).optional(),
 })
 
 export const ProjectSchema = z.object({
@@ -86,6 +93,7 @@ export function migrate(raw: unknown): ProjectParsed {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       milestones,
       today: meta.today,
+      mindmapPositions: normalizePositions(meta.mindmapPositions),
     },
     modules: (input.modules ?? []).map((m: any) => ({
       id: m.id,
@@ -109,6 +117,7 @@ export function migrate(raw: unknown): ProjectParsed {
           label: t.label,
           done: Boolean(t.done),
         })),
+        rank: typeof f.rank === 'number' && Number.isFinite(f.rank) ? f.rank : undefined,
       })),
     })),
   }
@@ -117,3 +126,24 @@ export function migrate(raw: unknown): ProjectParsed {
 }
 
 type Milestone = z.infer<typeof MilestoneSchema>
+
+function normalizePositions(
+  input: unknown,
+): Record<string, { x: number; y: number }> | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const out: Record<string, { x: number; y: number }> = {}
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (
+      v &&
+      typeof v === 'object' &&
+      typeof (v as { x?: unknown }).x === 'number' &&
+      typeof (v as { y?: unknown }).y === 'number'
+    ) {
+      out[k] = {
+        x: (v as { x: number }).x,
+        y: (v as { y: number }).y,
+      }
+    }
+  }
+  return Object.keys(out).length ? out : undefined
+}

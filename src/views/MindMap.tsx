@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useProjectStore } from '@/store/useProjectStore'
 import {
   featureIndex,
@@ -8,6 +8,8 @@ import {
   matchesFilters,
 } from '@/lib/deps'
 import type { Feature, Module } from '@/types'
+import { useContextMenu } from '@/components/ContextMenu'
+import { featureMenu, useFeatureActionsApi } from '@/lib/featureActions'
 
 type Point = { x: number; y: number }
 
@@ -21,13 +23,43 @@ export function MindMap() {
   const activeMs = useProjectStore((s) => s.activeMilestone)
   const activeStatus = useProjectStore((s) => s.activeStatus)
   const openDrawer = useProjectStore((s) => s.openDrawer)
+  const overrides = useProjectStore((s) => s.mindmapOverrides)
+  const setOverride = useProjectStore((s) => s.setMindmapOverride)
+  const resetOverrides = useProjectStore((s) => s.resetMindmapOverrides)
+  const pinPositions = useProjectStore((s) => s.pinMindmapPositions)
+  const clearPositions = useProjectStore((s) => s.clearMindmapPositions)
+  const pinned = project.meta.mindmapPositions
   const [hover, setHover] = useState<string | null>(null)
+  const ctx = useContextMenu()
+  const api = useFeatureActionsApi()
+  const [nodeDrag, setNodeDrag] = useState<{
+    id: string
+    pointerX: number
+    pointerY: number
+    origX: number
+    origY: number
+    dx: number
+    dy: number
+    moved: boolean
+  } | null>(null)
 
   const svgRef = useRef<SVGSVGElement>(null)
   const [scale, setScale] = useState(1)
   const [tx, setTx] = useState(0)
   const [ty, setTy] = useState(0)
   const [panning, setPanning] = useState(false)
+  const [showHint, setShowHint] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (localStorage.getItem('lodestar:mindmap-hint-seen')) return
+    setShowHint(true)
+    const t = window.setTimeout(() => {
+      setShowHint(false)
+      localStorage.setItem('lodestar:mindmap-hint-seen', '1')
+    }, 6000)
+    return () => window.clearTimeout(t)
+  }, [])
   const panRef = useRef(false)
   const pointerStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
 
@@ -63,32 +95,67 @@ export function MindMap() {
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
+      if (nodeDrag) return
+      // only pan on empty background, not on nodes (nodes handle their own pointerdown)
       panRef.current = true
       setPanning(true)
       pointerStart.current = { x: e.clientX, y: e.clientY, tx, ty }
       ;(e.target as Element).setPointerCapture?.(e.pointerId)
     },
-    [tx, ty],
+    [tx, ty, nodeDrag],
   )
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!panRef.current || !pointerStart.current) return
-    const svg = svgRef.current
-    if (!svg) return
-    const rect = svg.getBoundingClientRect()
-    const scaleX = W / rect.width
-    const scaleY = H / rect.height
-    const dx = (e.clientX - pointerStart.current.x) * scaleX
-    const dy = (e.clientY - pointerStart.current.y) * scaleY
-    setTx(pointerStart.current.tx + dx)
-    setTy(pointerStart.current.ty + dy)
-  }, [])
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (nodeDrag) {
+        const svg = svgRef.current
+        if (!svg) return
+        const rect = svg.getBoundingClientRect()
+        const clientDx = e.clientX - nodeDrag.pointerX
+        const clientDy = e.clientY - nodeDrag.pointerY
+        const dx = (clientDx * W) / rect.width / scale
+        const dy = (clientDy * H) / rect.height / scale
+        const moved = Math.hypot(clientDx, clientDy) > 3
+        if (dx !== nodeDrag.dx || dy !== nodeDrag.dy || moved !== nodeDrag.moved) {
+          setNodeDrag({ ...nodeDrag, dx, dy, moved })
+        }
+        return
+      }
+      if (!panRef.current || !pointerStart.current) return
+      const svg = svgRef.current
+      if (!svg) return
+      const rect = svg.getBoundingClientRect()
+      const scaleX = W / rect.width
+      const scaleY = H / rect.height
+      const dx = (e.clientX - pointerStart.current.x) * scaleX
+      const dy = (e.clientY - pointerStart.current.y) * scaleY
+      setTx(pointerStart.current.tx + dx)
+      setTy(pointerStart.current.ty + dy)
+    },
+    [nodeDrag, scale],
+  )
 
-  const onPointerUp = useCallback(() => {
-    panRef.current = false
-    setPanning(false)
-    pointerStart.current = null
-  }, [])
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (nodeDrag) {
+        if (nodeDrag.moved) {
+          setOverride(nodeDrag.id, {
+            x: nodeDrag.origX + nodeDrag.dx,
+            y: nodeDrag.origY + nodeDrag.dy,
+          })
+        } else {
+          openDrawer(nodeDrag.id)
+        }
+        setNodeDrag(null)
+        ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+        return
+      }
+      panRef.current = false
+      setPanning(false)
+      pointerStart.current = null
+    },
+    [nodeDrag, setOverride, openDrawer],
+  )
 
   const modules = project.modules
     .map((m) => ({
@@ -135,19 +202,41 @@ export function MindMap() {
   }, [modules])
 
   const idx = featureIndex(project)
+
+  const resolvePoint = (featId: string, autoPoint: Point): Point => {
+    if (nodeDrag && nodeDrag.id === featId) {
+      return {
+        x: nodeDrag.origX + nodeDrag.dx,
+        y: nodeDrag.origY + nodeDrag.dy,
+      }
+    }
+    const ov = overrides[featId]
+    if (ov) return ov
+    const pin = pinned?.[featId]
+    if (pin) return pin
+    return autoPoint
+  }
+
+  const featPointMap = new Map<string, Point>()
+  for (const mp of layout) {
+    for (const fp of mp.features) {
+      featPointMap.set(fp.feat.id, resolvePoint(fp.feat.id, fp.point))
+    }
+  }
+
   const depLines: { from: Point; to: Point; conflict: boolean }[] = []
   for (const mp of layout) {
     for (const fp of mp.features) {
+      const fromPoint = featPointMap.get(fp.feat.id)
+      if (!fromPoint) continue
       for (const d of fp.feat.deps) {
         const target = idx.get(d.id)
         if (!target) continue
-        const targetPoint = layout
-          .flatMap((x) => x.features)
-          .find((x) => x.feat.id === target.id)?.point
+        const targetPoint = featPointMap.get(target.id)
         if (!targetPoint) continue
         depLines.push({
           from: targetPoint,
-          to: fp.point,
+          to: fromPoint,
           conflict: hasConflict(project, fp.feat),
         })
       }
@@ -206,17 +295,20 @@ export function MindMap() {
 
           {/* feature spokes */}
           {layout.map((mp) =>
-            mp.features.map((fp) => (
-              <line
-                key={`fs-${fp.feat.id}`}
-                x1={mp.center.x}
-                y1={mp.center.y}
-                x2={fp.point.x}
-                y2={fp.point.y}
-                stroke={mp.mod.color}
-                strokeOpacity="0.3"
-              />
-            )),
+            mp.features.map((fp) => {
+              const p = featPointMap.get(fp.feat.id) ?? fp.point
+              return (
+                <line
+                  key={`fs-${fp.feat.id}`}
+                  x1={mp.center.x}
+                  y1={mp.center.y}
+                  x2={p.x}
+                  y2={p.y}
+                  stroke={mp.mod.color}
+                  strokeOpacity="0.3"
+                />
+              )
+            }),
           )}
 
           {/* dep lines */}
@@ -293,26 +385,56 @@ export function MindMap() {
                 ? 'rgb(var(--warn))'
                 : mp.mod.color
               const isHover = hover === fp.feat.id
+              const p = featPointMap.get(fp.feat.id) ?? fp.point
+              const isDragging = nodeDrag?.id === fp.feat.id
+              const basePoint =
+                overrides[fp.feat.id] ?? pinned?.[fp.feat.id] ?? fp.point
               return (
                 <g
                   key={`feat-${fp.feat.id}`}
                   onMouseEnter={() => setHover(fp.feat.id)}
                   onMouseLeave={() => setHover(null)}
-                  onClick={() => openDrawer(fp.feat.id)}
-                  style={{ cursor: 'pointer' }}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return
+                    e.stopPropagation()
+                    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+                    setNodeDrag({
+                      id: fp.feat.id,
+                      pointerX: e.clientX,
+                      pointerY: e.clientY,
+                      origX: basePoint.x,
+                      origY: basePoint.y,
+                      dx: 0,
+                      dy: 0,
+                      moved: false,
+                    })
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    ctx.openAt(e.clientX, e.clientY, featureMenu(api, fp.feat))
+                  }}
+                  style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
                 >
                   <circle
-                    cx={fp.point.x}
-                    cy={fp.point.y}
-                    r={isHover ? 8 : 5}
+                    cx={p.x}
+                    cy={p.y}
+                    r={isHover || isDragging ? 8 : 5}
                     fill={fill}
                     stroke={stroke}
-                    strokeWidth={isHover ? 2 : 1}
+                    strokeWidth={isHover || isDragging ? 2 : 1}
+                    strokeDasharray={
+                      overrides[fp.feat.id]
+                        ? '2 2'
+                        : pinned?.[fp.feat.id]
+                        ? '1 2'
+                        : undefined
+                    }
                   />
-                  {isHover && (
+                  {(isHover || isDragging) && (
                     <text
-                      x={fp.point.x}
-                      y={fp.point.y + 22}
+                      x={p.x}
+                      y={p.y + 22}
                       textAnchor="middle"
                       fontFamily="Geist"
                       fontSize="11"
@@ -327,6 +449,13 @@ export function MindMap() {
           )}
           </g>
         </svg>
+
+        {showHint && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 label-mono bg-base/95 border border-accent/60 px-4 py-2.5 backdrop-blur animate-pulse pointer-events-none">
+            <span className="text-accent">▸</span>
+            <span className="ml-2 text-fg">Wheel zoom · Drag pan · Drag nodes · Dbl-click reset</span>
+          </div>
+        )}
 
         {/* legend */}
         <div className="absolute bottom-6 left-6 flex items-center gap-5 label-mono bg-base/80 border border-line/60 px-4 py-2.5 backdrop-blur">
@@ -349,8 +478,40 @@ export function MindMap() {
           >
             RESET
           </button>
+          {Object.keys(overrides).length > 0 && (
+            <>
+              <span className="text-fg-subtle">·</span>
+              <button
+                onClick={pinPositions}
+                className="text-fg-muted hover:text-accent"
+                title="Save these positions with the project"
+              >
+                PIN
+              </button>
+              <button
+                onClick={resetOverrides}
+                className="text-fg-muted hover:text-fg"
+                title="Discard position changes"
+              >
+                CLEAR
+              </button>
+            </>
+          )}
+          {Object.keys(overrides).length === 0 && pinned && Object.keys(pinned).length > 0 && (
+            <>
+              <span className="text-fg-subtle">·</span>
+              <button
+                onClick={clearPositions}
+                className="text-fg-muted hover:text-danger"
+                title="Remove saved positions (back to auto-layout)"
+              >
+                UNPIN
+              </button>
+            </>
+          )}
         </div>
       </div>
+      {ctx.menu}
     </div>
   )
 }

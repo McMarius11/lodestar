@@ -12,7 +12,7 @@ export function ValidationPanel() {
     <div className="h-full overflow-auto scroll-thin">
       <div className="p-8 border-b border-line/60">
         <div className="flex items-center gap-4 mb-6">
-          <h1 className="ser-display text-5xl italic">Validation</h1>
+          <h1 className="ser-display text-5xl italic">Status</h1>
           <div className="flex gap-4 ml-4">
             <Counter label="errors" count={counts.error} color="text-danger border-danger" />
             <Counter label="warnings" count={counts.warn} color="text-warn border-warn" />

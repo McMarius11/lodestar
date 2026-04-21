@@ -12,6 +12,13 @@ import { StatusGlyph } from '@/components/StatusGlyph'
 import { EffortBadge } from '@/components/EffortBadge'
 import { ProgressBar } from '@/components/ProgressBar'
 import { ModuleEditor } from '@/components/ModuleEditor'
+import { useContextMenu } from '@/components/ContextMenu'
+import {
+  emptyAreaMenu,
+  featureMenu,
+  moduleMenu,
+  useFeatureActionsApi,
+} from '@/lib/featureActions'
 import type { Feature, Module } from '@/types'
 
 export function ModuleScope() {
@@ -20,6 +27,8 @@ export function ModuleScope() {
   const activeStatus = useProjectStore((s) => s.activeStatus)
   const addFeature = useProjectStore((s) => s.addFeature)
   const reorderModules = useProjectStore((s) => s.reorderModules)
+  const ctx = useContextMenu()
+  const api = useFeatureActionsApi()
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
 
@@ -48,7 +57,14 @@ export function ModuleScope() {
   }
 
   return (
-    <div className="h-full overflow-auto scroll-thin">
+    <div
+      className="h-full overflow-auto scroll-thin"
+      onContextMenu={(e) => {
+        if (e.target !== e.currentTarget) return
+        e.preventDefault()
+        ctx.openAt(e.clientX, e.clientY, emptyAreaMenu(api, { kind: 'scope' }))
+      }}
+    >
       <div className="px-8 pt-8 pb-6 border-b border-line/40">
         <div className="flex items-end justify-between gap-6">
           <div>
@@ -72,6 +88,19 @@ export function ModuleScope() {
             key={m.id}
             module={m}
             onAddFeature={() => addFeature(m.id)}
+            onContextFeature={(feat, e) =>
+              ctx.openAt(e.clientX, e.clientY, featureMenu(api, feat))
+            }
+            onContextModule={(e) =>
+              ctx.openAt(e.clientX, e.clientY, moduleMenu(api, m))
+            }
+            onContextEmpty={(e) =>
+              ctx.openAt(
+                e.clientX,
+                e.clientY,
+                emptyAreaMenu(api, { kind: 'scope-module', moduleId: m.id }),
+              )
+            }
             dragging={dragId === m.id}
             dragOver={overId === m.id && dragId !== null && dragId !== m.id}
             onDragStart={() => setDragId(m.id)}
@@ -86,6 +115,7 @@ export function ModuleScope() {
           />
         ))}
       </div>
+      {ctx.menu}
     </div>
   )
 }
@@ -131,6 +161,9 @@ function Stat({
 function ModuleCard({
   module,
   onAddFeature,
+  onContextFeature,
+  onContextModule,
+  onContextEmpty,
   dragging,
   dragOver,
   onDragStart,
@@ -140,6 +173,9 @@ function ModuleCard({
 }: {
   module: Module
   onAddFeature: () => void
+  onContextFeature: (feat: Feature, e: React.MouseEvent) => void
+  onContextModule: (e: React.MouseEvent) => void
+  onContextEmpty: (e: React.MouseEvent) => void
   dragging: boolean
   dragOver: boolean
   onDragStart: () => void
@@ -174,7 +210,13 @@ function ModuleCard({
         dragOver && 'bg-accent/5 ring-1 ring-accent/60 ring-inset',
       )}
     >
-      <header className="flex items-center gap-4 px-6 pt-5 pb-3 border-b border-line/40">
+      <header
+        onContextMenu={(e) => {
+          e.preventDefault()
+          onContextModule(e)
+        }}
+        className="flex items-center gap-4 px-6 pt-5 pb-3 border-b border-line/40"
+      >
         <span
           draggable
           onDragStart={(e) => {
@@ -240,21 +282,50 @@ function ModuleCard({
           return (
             <li
               key={f.id}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onContextFeature(f, e)
+              }}
               className={clsx(
                 'border-b border-line/30 relative',
                 isCursor && 'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-accent',
               )}
             >
-              <button
-                onClick={() => setExpanded(isExpanded ? null : f.id)}
-                onDoubleClick={() => openDrawer(f.id)}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => openDrawer(f.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openDrawer(f.id)
+                  }
+                }}
                 className={clsx(
-                  'w-full grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 px-6 py-3 text-left transition-colors',
-                  'hover:bg-raised/40',
+                  'w-full grid grid-cols-[auto_auto_1fr_auto_auto_auto] items-center gap-4 px-6 py-3 text-left transition-colors cursor-pointer',
+                  'hover:bg-raised/40 focus:outline-none focus-visible:bg-raised/40',
                   isExpanded && 'bg-raised/30',
                   isCursor && !isExpanded && 'bg-accent/5',
                 )}
               >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setExpanded(isExpanded ? null : f.id)
+                  }}
+                  className={clsx(
+                    'w-4 h-4 flex items-center justify-center text-fg-subtle hover:text-fg shrink-0 transition-transform',
+                    isExpanded && 'rotate-90 text-fg',
+                  )}
+                  title={isExpanded ? 'Collapse tasks' : 'Expand tasks'}
+                  aria-label={isExpanded ? 'Collapse tasks' : 'Expand tasks'}
+                  aria-expanded={isExpanded}
+                >
+                  <svg viewBox="0 0 10 10" width="8" height="8">
+                    <path d="M3 1 L7 5 L3 9" stroke="currentColor" strokeWidth="1.4" fill="none" />
+                  </svg>
+                </button>
                 <StatusGlyph
                   kind={conflict ? 'conflict' : blocked ? 'blocked' : st}
                 />
@@ -271,7 +342,7 @@ function ModuleCard({
                 <span className="label-mono num-mono shrink-0 w-[50px] text-right">
                   {c.done}/{c.total}
                 </span>
-              </button>
+              </div>
               {isExpanded && (
                 <div className="px-6 pb-4 pl-[58px] bg-sunken/30">
                   <ul className="space-y-1">
@@ -297,7 +368,14 @@ function ModuleCard({
           )
         })}
         {module.features.length === 0 && (
-          <li className="px-6 py-6 label-mono text-fg-subtle text-center">
+          <li
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onContextEmpty(e)
+            }}
+            className="px-6 py-6 label-mono text-fg-subtle text-center"
+          >
             NO FEATURES IN CURRENT FILTER
           </li>
         )}

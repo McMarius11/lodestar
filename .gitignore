@@ -14,3 +14,6 @@ release
 
 # local project data — use data/project.example.json as starting point
 data/project.json
+
+# Claude Code local state
+.claude/

@@ -12,6 +12,12 @@ import {
 import { StatusGlyph } from '@/components/StatusGlyph'
 import { EffortBadge } from '@/components/EffortBadge'
 import { ProgressBar } from '@/components/ProgressBar'
+import { useContextMenu } from '@/components/ContextMenu'
+import {
+  emptyAreaMenu,
+  featureMenu,
+  useFeatureActionsApi,
+} from '@/lib/featureActions'
 import type { Feature } from '@/types'
 
 function stripMd(text: string): string {
@@ -39,9 +45,14 @@ export function Kanban() {
   const setAllTasksDone = useProjectStore((s) => s.setAllTasksDone)
   const toggleTask = useProjectStore((s) => s.toggleTask)
   const addTask = useProjectStore((s) => s.addTask)
+  const setKanbanRank = useProjectStore((s) => s.setKanbanRank)
+  const normalizeKanbanRanks = useProjectStore((s) => s.normalizeKanbanRanks)
   const [sortBy, setSortBy] = useState<'module' | 'effort' | 'milestone'>('module')
   const [dragId, setDragId] = useState<string | null>(null)
   const [hotCol, setHotCol] = useState<ColId | null>(null)
+  const [dropBefore, setDropBefore] = useState<string | null>(null)
+  const ctx = useContextMenu()
+  const api = useFeatureActionsApi()
 
   const withMods = useMemo(() => {
     const out: (Feature & { modColor: string; modLabel: string })[] = []
@@ -52,19 +63,26 @@ export function Kanban() {
   }, [project])
 
   const filtered = withMods.filter((f) => matchesFilters(project, f, activeMs, activeStatus))
-  const sorted = [...filtered].sort((a, b) => {
+  const tieBreak = (a: Feature & { modLabel: string }, b: Feature & { modLabel: string }) => {
     if (sortBy === 'module') return a.modLabel.localeCompare(b.modLabel)
     if (sortBy === 'effort') {
       const order = { XL: 0, L: 1, M: 2, S: 3 }
       return order[a.effort] - order[b.effort]
     }
     return a.ms.localeCompare(b.ms)
-  })
+  }
+  const sortBucket = (arr: (Feature & { modLabel: string; modColor: string })[]) =>
+    [...arr].sort((a, b) => {
+      const ar = typeof a.rank === 'number' ? a.rank : Infinity
+      const br = typeof b.rank === 'number' ? b.rank : Infinity
+      if (ar !== br) return ar - br
+      return tieBreak(a, b)
+    })
 
   const buckets = {
-    backlog: sorted.filter((f) => featureStatus(f) === 'backlog'),
-    progress: sorted.filter((f) => featureStatus(f) === 'progress'),
-    done: sorted.filter((f) => featureStatus(f) === 'done'),
+    backlog: sortBucket(filtered.filter((f) => featureStatus(f) === 'backlog')),
+    progress: sortBucket(filtered.filter((f) => featureStatus(f) === 'progress')),
+    done: sortBucket(filtered.filter((f) => featureStatus(f) === 'done')),
   }
 
   const moveTo = (featureId: string, col: ColId) => {
@@ -86,6 +104,47 @@ export function Kanban() {
         if (last) toggleTask(featureId, last.id)
       }
     }
+  }
+
+  const rankBetween = (
+    col: ColId,
+    beforeId: string | null,
+    excludeId: string,
+  ): number => {
+    const list = buckets[col].filter((f) => f.id !== excludeId)
+    const idx = beforeId ? list.findIndex((f) => f.id === beforeId) : list.length
+    const prev = idx > 0 ? list[idx - 1] : null
+    const next = idx < list.length ? list[idx] : null
+    const prevRank = prev && typeof prev.rank === 'number' ? prev.rank : null
+    const nextRank = next && typeof next.rank === 'number' ? next.rank : null
+    if (prevRank !== null && nextRank !== null) return (prevRank + nextRank) / 2
+    if (prevRank !== null) return prevRank + 1
+    if (nextRank !== null) return nextRank - 1
+    // fallback: first ranked entry in column
+    return idx + 1
+  }
+
+  const handleDrop = (col: ColId, beforeId: string | null) => {
+    if (!dragId) return
+    const feat = withMods.find((f) => f.id === dragId)
+    if (!feat) return
+    const current = featureStatus(feat)
+    if (current !== col) moveTo(dragId, col)
+    const newRank = rankBetween(col, beforeId, dragId)
+    setKanbanRank(dragId, newRank)
+    // detect float-drift and renormalize
+    const nextList = buckets[col]
+    for (let i = 1; i < nextList.length; i++) {
+      const a = nextList[i - 1].rank
+      const b = nextList[i].rank
+      if (typeof a === 'number' && typeof b === 'number' && Math.abs(b - a) < 0.001) {
+        normalizeKanbanRanks()
+        break
+      }
+    }
+    setDragId(null)
+    setHotCol(null)
+    setDropBefore(null)
   }
 
   return (
@@ -126,14 +185,25 @@ export function Kanban() {
                 e.preventDefault()
                 if (hotCol !== col.id) setHotCol(col.id)
               }}
-              onDragLeave={() => {
-                if (hotCol === col.id) setHotCol(null)
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return
+                if (hotCol === col.id) {
+                  setHotCol(null)
+                  setDropBefore(null)
+                }
               }}
               onDrop={(e) => {
                 e.preventDefault()
-                if (dragId) moveTo(dragId, col.id)
-                setDragId(null)
-                setHotCol(null)
+                handleDrop(col.id, dropBefore)
+              }}
+              onContextMenu={(e) => {
+                if (e.target !== e.currentTarget) return
+                e.preventDefault()
+                ctx.openAt(
+                  e.clientX,
+                  e.clientY,
+                  emptyAreaMenu(api, { kind: 'kanban-column', col: col.id }),
+                )
               }}
               className={clsx(
                 'flex flex-col min-w-0 transition-colors',
@@ -154,23 +224,68 @@ export function Kanban() {
                 </span>
               </header>
               <div className="flex-1 overflow-auto scroll-thin p-4 space-y-2">
-                {list.map((f) => (
-                  <KanbanCard
-                    key={f.id}
-                    feature={f}
-                    modColor={f.modColor}
-                    modLabel={f.modLabel}
-                    dragging={dragId === f.id}
-                    onDragStart={() => setDragId(f.id)}
-                    onDragEnd={() => {
-                      setDragId(null)
-                      setHotCol(null)
-                    }}
-                    onClick={() => openDrawer(f.id)}
-                  />
-                ))}
+                {list.map((f, idx) => {
+                  const isDropBefore = isHot && dropBefore === f.id
+                  const isDropAfterLast =
+                    isHot && idx === list.length - 1 && dropBefore === null
+                  return (
+                    <div key={f.id}>
+                      {isDropBefore && (
+                        <div className="h-0.5 bg-accent mb-1.5 rounded" />
+                      )}
+                      <KanbanCard
+                        feature={f}
+                        modColor={f.modColor}
+                        modLabel={f.modLabel}
+                        dragging={dragId === f.id}
+                        onDragStart={() => setDragId(f.id)}
+                        onDragEnd={() => {
+                          setDragId(null)
+                          setHotCol(null)
+                          setDropBefore(null)
+                        }}
+                        onDragOverCard={(e) => {
+                          if (!dragId || dragId === f.id) return
+                          e.preventDefault()
+                          e.stopPropagation()
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          const mid = rect.top + rect.height / 2
+                          const next =
+                            e.clientY < mid
+                              ? f.id
+                              : list[idx + 1]?.id ?? null
+                          if (hotCol !== col.id) setHotCol(col.id)
+                          if (dropBefore !== next) setDropBefore(next)
+                        }}
+                        onDropCard={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDrop(col.id, dropBefore)
+                        }}
+                        onClick={() => openDrawer(f.id)}
+                        onContext={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          ctx.openAt(e.clientX, e.clientY, featureMenu(api, f))
+                        }}
+                      />
+                      {isDropAfterLast && (
+                        <div className="h-0.5 bg-accent mt-1.5 rounded" />
+                      )}
+                    </div>
+                  )
+                })}
                 {list.length === 0 && (
                   <div
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      ctx.openAt(
+                        e.clientX,
+                        e.clientY,
+                        emptyAreaMenu(api, { kind: 'kanban-column', col: col.id }),
+                      )
+                    }}
                     className={clsx(
                       'label-mono text-fg-subtle text-center py-8 border border-dashed transition-colors',
                       isHot ? 'border-accent text-accent' : 'border-line/30',
@@ -184,6 +299,7 @@ export function Kanban() {
           )
         })}
       </div>
+      {ctx.menu}
     </div>
   )
 }
@@ -195,7 +311,10 @@ function KanbanCard({
   dragging,
   onDragStart,
   onDragEnd,
+  onDragOverCard,
+  onDropCard,
   onClick,
+  onContext,
 }: {
   feature: Feature
   modColor: string
@@ -203,7 +322,10 @@ function KanbanCard({
   dragging: boolean
   onDragStart: () => void
   onDragEnd: () => void
+  onDragOverCard: (e: React.DragEvent) => void
+  onDropCard: (e: React.DragEvent) => void
   onClick: () => void
+  onContext: (e: React.MouseEvent) => void
 }) {
   const project = useProjectStore((s) => s.project)
   const c = completion(f)
@@ -216,10 +338,14 @@ function KanbanCard({
       draggable
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/lodestar-feature', f.id)
         e.dataTransfer.setData('text/plain', f.id)
         onDragStart()
       }}
       onDragEnd={onDragEnd}
+      onDragOver={onDragOverCard}
+      onDrop={onDropCard}
+      onContextMenu={onContext}
       className={clsx(
         'relative border bg-base transition-all',
         dragging ? 'opacity-40' : 'opacity-100',

@@ -230,7 +230,20 @@ ipcMain.handle('project:import', async () => {
   if (result.canceled || !result.filePaths[0]) return { ok: false, error: 'CANCELED' }
   try {
     const raw = await fs.readFile(result.filePaths[0], 'utf-8')
-    return { ok: true, data: JSON.parse(raw) }
+    return { ok: true, data: JSON.parse(raw), path: result.filePaths[0] }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('project:openPath', async (_evt, filePath: unknown) => {
+  if (typeof filePath !== 'string' || !filePath) {
+    return { ok: false, error: 'INVALID_PATH' }
+  }
+  if (!existsSync(filePath)) return { ok: false, error: 'NOT_FOUND' }
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8')
+    return { ok: true, data: JSON.parse(raw), path: filePath }
   } catch (err) {
     return { ok: false, error: String(err) }
   }

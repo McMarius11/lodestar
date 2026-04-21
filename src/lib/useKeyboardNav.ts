@@ -34,6 +34,8 @@ export function useKeyboardNav() {
   const toggleHelp = useProjectStore((s) => s.toggleHelp)
   const toggleTask = useProjectStore((s) => s.toggleTask)
   const addFeature = useProjectStore((s) => s.addFeature)
+  const cloneFeature = useProjectStore((s) => s.cloneFeature)
+  const updateFeature = useProjectStore((s) => s.updateFeature)
   const cursorId = useProjectStore((s) => s.cursorFeatureId)
   const setCursorId = useProjectStore((s) => s.setCursorFeature)
 
@@ -118,6 +120,27 @@ export function useKeyboardNav() {
           openDrawer(id)
           return
         }
+        if (e.key === 'F2' && cursorId) {
+          const feat = project.modules
+            .flatMap((m) => m.features)
+            .find((f) => f.id === cursorId)
+          if (!feat) return
+          e.preventDefault()
+          const next = prompt('Rename feature', feat.label)
+          if (next && next.trim() && next.trim() !== feat.label) {
+            updateFeature(feat.id, { label: next.trim() })
+          }
+          return
+        }
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'd' || e.key === 'D') && cursorId) {
+          e.preventDefault()
+          const id = cloneFeature(cursorId)
+          if (id) {
+            setCursorId(id)
+            openDrawer(id)
+          }
+          return
+        }
       }
     }
     window.addEventListener('keydown', onKey)
@@ -136,6 +159,8 @@ export function useKeyboardNav() {
     toggleHelp,
     toggleTask,
     addFeature,
+    cloneFeature,
+    updateFeature,
     setCursorId,
   ])
 }

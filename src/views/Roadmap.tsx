@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import clsx from 'clsx'
 import { useProjectStore } from '@/store/useProjectStore'
 import {
@@ -10,6 +11,12 @@ import {
 import { StatusGlyph } from '@/components/StatusGlyph'
 import { EffortBadge } from '@/components/EffortBadge'
 import { ProgressBar } from '@/components/ProgressBar'
+import { useContextMenu } from '@/components/ContextMenu'
+import {
+  emptyAreaMenu,
+  featureMenu,
+  useFeatureActionsApi,
+} from '@/lib/featureActions'
 import type { Feature } from '@/types'
 
 export function Roadmap() {
@@ -17,6 +24,11 @@ export function Roadmap() {
   const activeMs = useProjectStore((s) => s.activeMilestone)
   const activeStatus = useProjectStore((s) => s.activeStatus)
   const openDrawer = useProjectStore((s) => s.openDrawer)
+  const moveFeatureToMs = useProjectStore((s) => s.moveFeatureToMs)
+  const ctx = useContextMenu()
+  const api = useFeatureActionsApi()
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [hotMs, setHotMs] = useState<string | null>(null)
 
   const milestones =
     activeMs === 'all'
@@ -35,7 +47,13 @@ export function Roadmap() {
 
   return (
     <div className="h-full overflow-auto scroll-thin">
-      <div className="px-8 pt-8 pb-6 border-b border-line/40">
+      <div
+        onContextMenu={(e) => {
+          e.preventDefault()
+          ctx.openAt(e.clientX, e.clientY, emptyAreaMenu(api, { kind: 'roadmap-header' }))
+        }}
+        className="px-8 pt-8 pb-6 border-b border-line/40"
+      >
         <div className="label-mono mb-3">
           <span className="num-mono">02</span> · ROADMAP
         </div>
@@ -48,15 +66,35 @@ export function Roadmap() {
           const allTasks = features.flatMap((f) => f.tasks)
           const done = allTasks.filter((t) => t.done).length
           const pct = allTasks.length === 0 ? 0 : done / allTasks.length
+          const isHot = hotMs === ms.id && dragId !== null
           return (
             <div
               key={ms.id}
+              onDragOver={(e) => {
+                if (!dragId) return
+                e.preventDefault()
+                if (hotMs !== ms.id) setHotMs(ms.id)
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return
+                if (hotMs === ms.id) setHotMs(null)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (dragId) moveFeatureToMs(dragId, ms.id)
+                setDragId(null)
+                setHotMs(null)
+              }}
               className={clsx(
-                'flex-1 min-w-[320px] border-r border-line/60 flex flex-col',
+                'flex-1 min-w-[320px] border-r border-line/60 flex flex-col transition-colors',
                 i === 0 && 'border-l border-line/60 ml-[-1px]',
+                isHot && 'bg-accent/5',
               )}
             >
-              <div className="px-6 pt-5 pb-4 border-b border-line/60">
+              <div className={clsx(
+                'px-6 pt-5 pb-4 border-b transition-colors',
+                isHot ? 'border-accent' : 'border-line/60',
+              )}>
                 <div className="flex items-baseline gap-3">
                   <span className="num-mono text-accent text-lg">{ms.id}</span>
                   <span className="label-mono text-fg-muted">
@@ -70,17 +108,48 @@ export function Roadmap() {
                 <ProgressBar value={pct} className="mt-3" />
               </div>
 
-              <div className="flex-1 overflow-auto scroll-thin p-4 space-y-3">
+              <div
+                onContextMenu={(e) => {
+                  if (e.target !== e.currentTarget) return
+                  e.preventDefault()
+                  ctx.openAt(
+                    e.clientX,
+                    e.clientY,
+                    emptyAreaMenu(api, { kind: 'roadmap-column', ms: ms.id }),
+                  )
+                }}
+                className="flex-1 overflow-auto scroll-thin p-4 space-y-3"
+              >
                 {features.map((f) => {
                   const c = completion(f)
                   const st = featureStatus(f)
                   const blocked = isBlocked(project, f)
                   const conflict = hasConflict(project, f)
+                  const dragging = dragId === f.id
                   return (
                     <button
                       key={f.id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/lodestar-feature', f.id)
+                        e.dataTransfer.setData('text/plain', f.id)
+                        setDragId(f.id)
+                      }}
+                      onDragEnd={() => {
+                        setDragId(null)
+                        setHotMs(null)
+                      }}
                       onClick={() => openDrawer(f.id)}
-                      className="w-full text-left group relative border border-line/60 bg-base p-3 hover:border-fg-muted transition-colors"
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        ctx.openAt(e.clientX, e.clientY, featureMenu(api, f))
+                      }}
+                      className={clsx(
+                        'w-full text-left group relative border border-line/60 bg-base p-3 hover:border-fg-muted transition-colors cursor-grab active:cursor-grabbing',
+                        dragging && 'opacity-40',
+                      )}
                     >
                       <div
                         className="absolute left-0 top-0 bottom-0 w-[3px]"
@@ -115,7 +184,18 @@ export function Roadmap() {
                   )
                 })}
                 {features.length === 0 && (
-                  <div className="label-mono text-fg-subtle text-center py-8">
+                  <div
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      ctx.openAt(
+                        e.clientX,
+                        e.clientY,
+                        emptyAreaMenu(api, { kind: 'roadmap-column', ms: ms.id }),
+                      )
+                    }}
+                    className="label-mono text-fg-subtle text-center py-8"
+                  >
                     EMPTY
                   </div>
                 )}
@@ -124,6 +204,7 @@ export function Roadmap() {
           )
         })}
       </div>
+      {ctx.menu}
     </div>
   )
 }

@@ -9,9 +9,11 @@ import {
   saveProject,
   subscribeExternalChange,
 } from '@/lib/persistence'
-import { migrate } from '@/schema'
+import { CURRENT_SCHEMA_VERSION, migrate } from '@/schema'
 import { sampleProject } from '@/data/sample'
+import { lodestarRoadmap } from '@/data/lodestarRoadmap'
 import { newId, slugId } from '@/lib/id'
+import { featureStatus } from '@/lib/deps'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -35,6 +37,7 @@ type State = {
   savedAt: number | null
   history: Project[]
   future: Project[]
+  mindmapOverrides: Record<string, { x: number; y: number }>
 }
 
 type Actions = {
@@ -58,6 +61,13 @@ type Actions = {
   addFeature: (moduleId: string, partial?: Partial<Feature>) => string
   updateFeature: (featureId: string, patch: Partial<Feature>) => void
   deleteFeature: (featureId: string) => void
+  cloneFeature: (featureId: string) => string | null
+  moveFeatureToModule: (featureId: string, targetModuleId: string) => void
+  moveFeatureToMs: (featureId: string, ms: string) => void
+  reorderFeatureInModule: (featureId: string, targetIndex: number) => void
+  setFeatureGantt: (featureId: string, range: { start: number; end: number }) => void
+  setKanbanRank: (featureId: string, rank: number) => void
+  normalizeKanbanRanks: () => void
 
   addDep: (featureId: string, dep: Dep) => void
   updateDep: (featureId: string, depId: string, patch: Partial<Dep>) => void
@@ -67,6 +77,13 @@ type Actions = {
   updateModule: (moduleId: string, patch: Partial<Module>) => void
   deleteModule: (moduleId: string) => void
   reorderModules: (ids: string[]) => void
+  cloneModule: (moduleId: string) => string | null
+
+  setMindmapOverride: (featureId: string, point: { x: number; y: number } | null) => void
+  resetMindmapOverrides: () => void
+  pinMindmapPositions: () => void
+  clearMindmapPositions: () => void
+  closeCurrentProject: () => void
 
   updateMeta: (patch: Partial<Project['meta']>) => void
   addMilestone: (id: string, label: string) => void
@@ -80,6 +97,7 @@ type Actions = {
   importFile: () => Promise<void>
   importFromText: (text: string) => boolean
   loadSample: () => void
+  loadLodestarRoadmap: () => void
   startEmptyProject: (name: string) => void
   reloadFromDisk: () => Promise<void>
   dismissExternalChange: () => void
@@ -98,7 +116,7 @@ export const useProjectStore = create<State & Actions>()(
         name: '',
         description: '',
         version: '0.0.0',
-        schemaVersion: 1,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
         milestones: [],
       },
       modules: [],
@@ -119,6 +137,7 @@ export const useProjectStore = create<State & Actions>()(
     savedAt: null,
     history: [],
     future: [],
+    mindmapOverrides: {},
 
     init: async () => {
       const loaded = await loadProject()
@@ -182,13 +201,23 @@ export const useProjectStore = create<State & Actions>()(
       get()._persist()
     },
 
+    loadLodestarRoadmap: () => {
+      const p = migrate(lodestarRoadmap)
+      get()._pushHistory()
+      set((s) => {
+        s.project = p
+        s.source = 'disk'
+      })
+      get()._persist()
+    },
+
     startEmptyProject: (name) => {
       const empty: Project = {
         meta: {
           name: name || 'Untitled Project',
           description: '',
           version: '0.1.0',
-          schemaVersion: 2,
+          schemaVersion: CURRENT_SCHEMA_VERSION,
           milestones: [{ id: 'v0.1', label: 'v0.1' }],
         },
         modules: [],
@@ -199,6 +228,28 @@ export const useProjectStore = create<State & Actions>()(
         s.source = 'disk'
       })
       get()._persist()
+    },
+
+    closeCurrentProject: () => {
+      set((s) => {
+        s.project = {
+          meta: {
+            name: '',
+            description: '',
+            version: '0.0.0',
+            schemaVersion: CURRENT_SCHEMA_VERSION,
+            milestones: [],
+          },
+          modules: [],
+        }
+        s.source = 'none'
+        s.history = []
+        s.future = []
+        s.drawerFeatureId = null
+        s.paletteOpen = false
+        s.cursorFeatureId = null
+        s.mindmapOverrides = {}
+      })
     },
 
     setActiveView: (v) => set((s) => void (s.activeView = v)),
@@ -300,16 +351,180 @@ export const useProjectStore = create<State & Actions>()(
         m.features.push({
           id,
           label: partial?.label ?? 'New Feature',
+          description: partial?.description,
           effort: partial?.effort ?? 'M',
           ms: partial?.ms ?? s.project.meta.milestones[0]?.id ?? 'v0.1',
           ganttStart: partial?.ganttStart ?? 0,
           ganttEnd: partial?.ganttEnd ?? 2,
           deps: partial?.deps ?? [],
           tasks: partial?.tasks ?? [],
+          rank: partial?.rank,
         })
       })
       get()._persist()
       return id
+    },
+
+    cloneFeature: (featureId) => {
+      const project = get().project
+      let sourceModuleId: string | null = null
+      let sourceFeature: Feature | null = null
+      let sourceIndex = -1
+      for (const m of project.modules) {
+        const idx = m.features.findIndex((f) => f.id === featureId)
+        if (idx >= 0) {
+          sourceModuleId = m.id
+          sourceFeature = m.features[idx]
+          sourceIndex = idx
+          break
+        }
+      }
+      if (!sourceFeature || !sourceModuleId) return null
+      const newFeatureId = slugId(`${sourceFeature.label} copy`)
+      const clone: Feature = {
+        ...JSON.parse(JSON.stringify(sourceFeature)),
+        id: newFeatureId,
+        label: `${sourceFeature.label} (copy)`,
+        tasks: sourceFeature.tasks.map((t) => ({ ...t, id: newId('t') })),
+        rank: undefined,
+      }
+      get()._pushHistory()
+      set((s) => {
+        const m = s.project.modules.find((x) => x.id === sourceModuleId)
+        if (!m) return
+        m.features.splice(sourceIndex + 1, 0, clone)
+      })
+      get()._persist()
+      return newFeatureId
+    },
+
+    moveFeatureToModule: (featureId, targetModuleId) => {
+      const project = get().project
+      const target = project.modules.find((m) => m.id === targetModuleId)
+      if (!target) return
+      let source: Module | null = null
+      let feat: Feature | null = null
+      for (const m of project.modules) {
+        const f = m.features.find((x) => x.id === featureId)
+        if (f) {
+          source = m
+          feat = f
+          break
+        }
+      }
+      if (!source || !feat || source.id === targetModuleId) return
+      get()._pushHistory()
+      set((s) => {
+        const src = s.project.modules.find((m) => m.id === source!.id)
+        const tgt = s.project.modules.find((m) => m.id === targetModuleId)
+        if (!src || !tgt) return
+        const moved = src.features.find((f) => f.id === featureId)
+        if (!moved) return
+        src.features = src.features.filter((f) => f.id !== featureId)
+        tgt.features.push(moved)
+      })
+      get()._persist()
+    },
+
+    moveFeatureToMs: (featureId, ms) => {
+      get()._pushHistory()
+      set((s) => {
+        for (const m of s.project.modules) {
+          const f = m.features.find((x) => x.id === featureId)
+          if (f) {
+            f.ms = ms
+            break
+          }
+        }
+      })
+      get()._persist()
+    },
+
+    reorderFeatureInModule: (featureId, targetIndex) => {
+      const project = get().project
+      let modId: string | null = null
+      let sourceIndex = -1
+      for (const m of project.modules) {
+        const idx = m.features.findIndex((f) => f.id === featureId)
+        if (idx >= 0) {
+          modId = m.id
+          sourceIndex = idx
+          break
+        }
+      }
+      if (!modId || sourceIndex < 0) return
+      get()._pushHistory()
+      set((s) => {
+        const m = s.project.modules.find((x) => x.id === modId)
+        if (!m) return
+        const [moved] = m.features.splice(sourceIndex, 1)
+        if (!moved) return
+        const clamped = Math.max(0, Math.min(targetIndex, m.features.length))
+        m.features.splice(clamped, 0, moved)
+      })
+      get()._persist()
+    },
+
+    setFeatureGantt: (featureId, { start, end }) => {
+      if (end <= start) end = start + 1
+      get()._pushHistory()
+      set((s) => {
+        for (const m of s.project.modules) {
+          const f = m.features.find((x) => x.id === featureId)
+          if (f) {
+            f.ganttStart = Math.max(0, Math.round(start))
+            f.ganttEnd = Math.max(f.ganttStart + 1, Math.round(end))
+            break
+          }
+        }
+      })
+      get()._persist()
+    },
+
+    setKanbanRank: (featureId, rank) => {
+      get()._pushHistory()
+      set((s) => {
+        for (const m of s.project.modules) {
+          const f = m.features.find((x) => x.id === featureId)
+          if (f) {
+            f.rank = rank
+            break
+          }
+        }
+      })
+      get()._persist()
+    },
+
+    normalizeKanbanRanks: () => {
+      const project = get().project
+      const byStatus: Record<string, Feature[]> = { backlog: [], progress: [], done: [] }
+      for (const m of project.modules) {
+        for (const f of m.features) {
+          const st = featureStatus(f)
+          byStatus[st].push(f)
+        }
+      }
+      for (const key of Object.keys(byStatus)) {
+        byStatus[key].sort((a, b) => {
+          const ar = a.rank ?? Number.POSITIVE_INFINITY
+          const br = b.rank ?? Number.POSITIVE_INFINITY
+          return ar - br
+        })
+      }
+      set((s) => {
+        for (const key of Object.keys(byStatus)) {
+          byStatus[key].forEach((ref, i) => {
+            for (const m of s.project.modules) {
+              const f = m.features.find((x) => x.id === ref.id)
+              if (f) {
+                f.rank = i + 1
+                break
+              }
+            }
+          })
+        }
+      })
+      get()._persist()
     },
 
     updateFeature: (featureId, patch) => {
@@ -436,6 +651,66 @@ export const useProjectStore = create<State & Actions>()(
       if (next.length !== current.length) return
       get()._pushHistory()
       set((s) => void (s.project.modules = next))
+      get()._persist()
+    },
+
+    cloneModule: (moduleId) => {
+      const project = get().project
+      const idx = project.modules.findIndex((m) => m.id === moduleId)
+      if (idx < 0) return null
+      const source = project.modules[idx]
+      const newModId = slugId(`${source.label} copy`)
+      const clone: Module = {
+        id: newModId,
+        label: `${source.label} (copy)`,
+        color: source.color,
+        features: source.features.map((f) => ({
+          ...JSON.parse(JSON.stringify(f)),
+          id: slugId(`${f.label} copy`),
+          tasks: f.tasks.map((t) => ({ ...t, id: newId('t') })),
+          deps: [],
+          rank: undefined,
+        })),
+      }
+      get()._pushHistory()
+      set((s) => {
+        s.project.modules.splice(idx + 1, 0, clone)
+      })
+      get()._persist()
+      return newModId
+    },
+
+    setMindmapOverride: (featureId, point) => {
+      set((s) => {
+        if (point === null) delete s.mindmapOverrides[featureId]
+        else s.mindmapOverrides[featureId] = point
+      })
+    },
+
+    resetMindmapOverrides: () => {
+      set((s) => void (s.mindmapOverrides = {}))
+    },
+
+    pinMindmapPositions: () => {
+      const { mindmapOverrides, project } = get()
+      if (Object.keys(mindmapOverrides).length === 0) return
+      const existing = project.meta.mindmapPositions ?? {}
+      const merged: Record<string, { x: number; y: number }> = { ...existing }
+      for (const [k, v] of Object.entries(mindmapOverrides)) merged[k] = v
+      get()._pushHistory()
+      set((s) => {
+        s.project.meta.mindmapPositions = merged
+        s.mindmapOverrides = {}
+      })
+      get()._persist()
+    },
+
+    clearMindmapPositions: () => {
+      get()._pushHistory()
+      set((s) => {
+        delete s.project.meta.mindmapPositions
+        s.mindmapOverrides = {}
+      })
       get()._persist()
     },
 
