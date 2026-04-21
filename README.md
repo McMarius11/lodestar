@@ -12,6 +12,7 @@ Five synced views over a single `data/project.json`, no backend, no database.
 ## Stack
 
 Electron · Vite · React 18 · TypeScript · Zustand · Tailwind · Zod · Framer Motion.
+See [Built with](#built-with) below for the full list.
 
 ## Dev
 
@@ -63,12 +64,35 @@ Claude can edit `data/project.json` directly. Examples:
 ```
 "Add a feature 'OAuth2 provider' to the Auth module, effort M, v0.2"
 "Move all v0.3 features to v0.4 — we need more time"
-"Security Policy needs a runtime dep on Certificates"
+"Sync Engine needs a runtime dep on Metadata Index"
 "Show me every feature with a dep conflict"
 ```
 
 On save, the file watcher pushes the change back into the UI.
 
+## Built with
+
+**Runtime**
+
+- [React 18](https://react.dev) — UI
+- [Zustand](https://github.com/pmndrs/zustand) + [Immer](https://github.com/immerjs/immer) — state with 50-step undo
+- [Zod](https://zod.dev) — schema validation & migration
+- [Tailwind CSS](https://tailwindcss.com) — styling
+- [Framer Motion](https://www.framer.com/motion/) — drawer / overlay transitions
+- [nanoid](https://github.com/ai/nanoid) + [clsx](https://github.com/lukeed/clsx) — small utilities
+
+**Build & desktop**
+
+- [Vite](https://vitejs.dev) + [TypeScript](https://www.typescriptlang.org) (strict)
+- [Electron](https://www.electronjs.org) + [electron-builder](https://www.electron.build)
+
+**Fonts**
+
+- [Instrument Serif](https://fonts.google.com/specimen/Instrument+Serif) — display (SIL OFL)
+- [Geist & Geist Mono](https://vercel.com/font) — body & labels (SIL OFL)
+
+Design and code co-developed with [Claude Code](https://claude.com/claude-code).
+
 ## License
 
-MIT — do whatever.
+MIT — see [LICENSE](./LICENSE).
