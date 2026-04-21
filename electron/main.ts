@@ -15,16 +15,27 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
   : RENDERER_DIST
 
-const DATA_DIR = path.join(process.env.APP_ROOT, 'data')
-const DATA_FILE = path.join(DATA_DIR, 'project.json')
+// In dev: keep data in the repo's ./data so Claude Code can see edits live.
+// In packaged builds: app.asar is read-only, so use the platform userData dir.
+let _dataDir: string | null = null
+function dataDir(): string {
+  if (_dataDir) return _dataDir
+  _dataDir = VITE_DEV_SERVER_URL
+    ? path.join(process.env.APP_ROOT!, 'data')
+    : path.join(app.getPath('userData'), 'data')
+  return _dataDir
+}
+function dataFile(): string {
+  return path.join(dataDir(), 'project.json')
+}
 
 let win: BrowserWindow | null = null
 let watcher: FSWatcher | null = null
 let writingOwn = false
 
 async function ensureDataFile(): Promise<void> {
-  if (!existsSync(DATA_DIR)) {
-    await fs.mkdir(DATA_DIR, { recursive: true })
+  if (!existsSync(dataDir())) {
+    await fs.mkdir(dataDir(), { recursive: true })
   }
 }
 
@@ -58,10 +69,10 @@ function createWindow(): void {
 }
 
 function startWatcher(): void {
-  if (!existsSync(DATA_FILE)) return
+  if (!existsSync(dataFile())) return
   watcher?.close()
   try {
-    watcher = fsWatch(DATA_FILE, { persistent: false }, (eventType) => {
+    watcher = fsWatch(dataFile(), { persistent: false }, (eventType) => {
       if (writingOwn) return
       if (eventType === 'change' && win) {
         win.webContents.send('project:external-change')
@@ -74,11 +85,11 @@ function startWatcher(): void {
 
 ipcMain.handle('project:load', async () => {
   await ensureDataFile()
-  if (!existsSync(DATA_FILE)) {
+  if (!existsSync(dataFile())) {
     return { ok: false, error: 'NOT_FOUND' }
   }
   try {
-    const raw = await fs.readFile(DATA_FILE, 'utf-8')
+    const raw = await fs.readFile(dataFile(), 'utf-8')
     return { ok: true, data: JSON.parse(raw) }
   } catch (err) {
     return { ok: false, error: String(err) }
@@ -89,7 +100,7 @@ ipcMain.handle('project:save', async (_evt, payload: unknown) => {
   await ensureDataFile()
   try {
     writingOwn = true
-    await fs.writeFile(DATA_FILE, JSON.stringify(payload, null, 2), 'utf-8')
+    await fs.writeFile(dataFile(), JSON.stringify(payload, null, 2), 'utf-8')
     if (!watcher) startWatcher()
     setTimeout(() => {
       writingOwn = false
