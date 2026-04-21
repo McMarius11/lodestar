@@ -1,33 +1,41 @@
 import type { Project } from '@/types'
 import { migrate } from '@/schema'
-import { sampleProject } from '@/data/sample'
 
 const LS_KEY = 'projekt-planner:project:v1'
+
+export type LoadedProject =
+  | { project: Project; source: 'disk' | 'localStorage'; status: 'ok' }
+  | { project: null; source: 'none'; status: 'empty' }
+  | { project: Project; source: 'disk' | 'localStorage'; status: 'corrupt'; error: string }
 
 function hasElectron(): boolean {
   return typeof window !== 'undefined' && typeof window.projectAPI !== 'undefined'
 }
 
-export async function loadProject(): Promise<{ project: Project; source: 'disk' | 'localStorage' | 'sample' }> {
+export async function loadProject(): Promise<LoadedProject> {
   if (hasElectron()) {
     const res = await window.projectAPI.load()
     if (res.ok) {
       try {
-        return { project: migrate(res.data), source: 'disk' }
+        return { project: migrate(res.data), source: 'disk', status: 'ok' }
       } catch (err) {
-        console.warn('Migration failed, falling back to sample:', err)
-        return { project: migrate(sampleProject), source: 'sample' }
+        return {
+          project: null as unknown as Project,
+          source: 'disk',
+          status: 'corrupt',
+          error: String(err),
+        } as LoadedProject
       }
     }
-    return { project: migrate(sampleProject), source: 'sample' }
+    return { project: null, source: 'none', status: 'empty' }
   }
   try {
     const raw = localStorage.getItem(LS_KEY)
-    if (raw) return { project: migrate(JSON.parse(raw)), source: 'localStorage' }
-  } catch {
-    /* ignore */
+    if (raw) return { project: migrate(JSON.parse(raw)), source: 'localStorage', status: 'ok' }
+  } catch (err) {
+    console.warn('localStorage migration failed', err)
   }
-  return { project: migrate(sampleProject), source: 'sample' }
+  return { project: null, source: 'none', status: 'empty' }
 }
 
 export async function saveProject(project: Project): Promise<void> {
@@ -74,6 +82,15 @@ export async function importProject(): Promise<Project | null> {
     }
     input.click()
   })
+}
+
+export function importProjectFromText(text: string): Project | null {
+  try {
+    return migrate(JSON.parse(text))
+  } catch (err) {
+    console.warn('Import from text failed', err)
+    return null
+  }
 }
 
 export function subscribeExternalChange(cb: () => void): () => void {

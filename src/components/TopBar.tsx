@@ -3,6 +3,8 @@ import { useProjectStore } from '@/store/useProjectStore'
 import type { ViewId } from '@/types'
 import { MilestoneFilter } from './MilestoneFilter'
 import { StatusFilter } from './StatusFilter'
+import { MilestoneEditor } from './MilestoneEditor'
+import { ProjectMetaEditor } from './ProjectMetaEditor'
 import { useEffect, useMemo, useState } from 'react'
 import { validate } from '@/lib/validate'
 
@@ -21,7 +23,20 @@ export function TopBar() {
   const setActive = useProjectStore((s) => s.setActiveView)
   const togglePalette = useProjectStore((s) => s.togglePalette)
   const saveStatus = useProjectStore((s) => s.saveStatus)
+  const savedAt = useProjectStore((s) => s.savedAt)
   const source = useProjectStore((s) => s.source)
+  const undo = useProjectStore((s) => s.undo)
+  const redo = useProjectStore((s) => s.redo)
+  const canUndo = useProjectStore((s) => s.history.length > 0)
+  const canRedo = useProjectStore((s) => s.future.length > 0)
+  const addFeature = useProjectStore((s) => s.addFeature)
+  const addModule = useProjectStore((s) => s.addModule)
+  const openDrawer = useProjectStore((s) => s.openDrawer)
+  const msEditorOpen = useProjectStore((s) => s.msEditorOpen)
+  const metaEditorOpen = useProjectStore((s) => s.metaEditorOpen)
+  const toggleMilestoneEditor = useProjectStore((s) => s.toggleMilestoneEditor)
+  const toggleMetaEditor = useProjectStore((s) => s.toggleMetaEditor)
+
   const { errCount, warnCount } = useMemo(() => {
     const issues = validate(project)
     return {
@@ -30,11 +45,25 @@ export function TopBar() {
     }
   }, [project])
 
+  const handleAddFeature = () => {
+    const firstModule = project.modules[0]
+    if (!firstModule) {
+      alert('Add a module first.')
+      return
+    }
+    const id = addFeature(firstModule.id)
+    openDrawer(id)
+  }
+
   return (
     <header className="relative z-20 border-b border-line/60 bg-void/80 backdrop-blur-sm">
       <div className="flex items-stretch">
         {/* Brand */}
-        <div className="flex items-center gap-3 px-5 py-3 border-r border-line/60 min-w-[280px]">
+        <button
+          onClick={() => toggleMetaEditor(true)}
+          className="flex items-center gap-3 px-5 py-3 border-r border-line/60 min-w-[280px] text-left hover:bg-raised/30 transition-colors"
+          title="Edit project meta"
+        >
           <div className="h-6 w-6 bg-accent shrink-0" aria-hidden />
           <div className="flex flex-col leading-none">
             <span className="ser-display text-xl italic text-fg">
@@ -46,7 +75,7 @@ export function TopBar() {
               <span>{source ?? '—'}</span>
             </span>
           </div>
-        </div>
+        </button>
 
         {/* Tabs */}
         <nav className="flex items-stretch flex-1 overflow-x-auto scroll-thin">
@@ -97,10 +126,33 @@ export function TopBar() {
         </nav>
 
         {/* Right cluster */}
-        <div className="flex items-center gap-3 px-4 border-l border-line/60">
+        <div className="flex items-center gap-2 px-3 border-l border-line/60">
+          <div className="flex items-center gap-1 pr-1 border-r border-line/60">
+            <IconBtn
+              onClick={handleAddFeature}
+              title="Add feature (n)"
+              disabled={project.modules.length === 0}
+            >
+              <span className="label-mono">+ FEAT</span>
+            </IconBtn>
+            <IconBtn onClick={() => addModule()} title="Add module">
+              <span className="label-mono">+ MOD</span>
+            </IconBtn>
+            <IconBtn onClick={() => toggleMilestoneEditor(true)} title="Edit milestones">
+              <span className="label-mono">MS</span>
+            </IconBtn>
+          </div>
+          <div className="flex items-center gap-1 pr-1 border-r border-line/60">
+            <IconBtn onClick={() => undo()} disabled={!canUndo} title="Undo (⌘Z)">
+              ↶
+            </IconBtn>
+            <IconBtn onClick={() => redo()} disabled={!canRedo} title="Redo (⌘⇧Z)">
+              ↷
+            </IconBtn>
+          </div>
           <StatusFilter />
           <MilestoneFilter />
-          <SaveIndicator status={saveStatus} />
+          <SaveIndicator status={saveStatus} savedAt={savedAt} />
           <button
             onClick={() => togglePalette(true)}
             className="btn-ghost label-mono"
@@ -110,27 +162,63 @@ export function TopBar() {
           </button>
         </div>
       </div>
+
+      {msEditorOpen && <MilestoneEditor onClose={() => toggleMilestoneEditor(false)} />}
+      {metaEditorOpen && <ProjectMetaEditor onClose={() => toggleMetaEditor(false)} />}
     </header>
   )
 }
 
-function SaveIndicator({ status }: { status: 'idle' | 'saving' | 'saved' | 'error' }) {
-  const [flash, setFlash] = useState(false)
+function IconBtn({
+  children,
+  onClick,
+  disabled,
+  title,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  disabled?: boolean
+  title: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={clsx(
+        'px-2 py-1 border border-line/40 text-sm transition-colors',
+        'hover:bg-raised hover:border-line-strong/80',
+        'disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-line/40',
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function SaveIndicator({
+  status,
+  savedAt,
+}: {
+  status: 'idle' | 'saving' | 'saved' | 'error'
+  savedAt: number | null
+}) {
+  const [now, setNow] = useState(() => Date.now())
+
   useEffect(() => {
-    if (status === 'saved') {
-      setFlash(true)
-      const t = setTimeout(() => setFlash(false), 1400)
-      return () => clearTimeout(t)
-    }
-  }, [status])
+    const t = setInterval(() => setNow(Date.now()), 5000)
+    return () => clearInterval(t)
+  }, [])
 
   const { label, color } =
     status === 'saving'
       ? { label: 'SAVING', color: 'text-accent' }
       : status === 'error'
       ? { label: 'ERROR', color: 'text-danger' }
-      : flash
+      : savedAt && now - savedAt < 3500
       ? { label: 'SAVED', color: 'text-success' }
+      : savedAt
+      ? { label: `SAVED · ${rel(now - savedAt)}`, color: 'text-fg-subtle' }
       : { label: 'SYNCED', color: 'text-fg-subtle' }
 
   return (
@@ -142,7 +230,7 @@ function SaveIndicator({ status }: { status: 'idle' | 'saving' | 'saved' | 'erro
             ? 'bg-accent animate-accent-pulse'
             : status === 'error'
             ? 'bg-danger'
-            : flash
+            : savedAt && now - savedAt < 3500
             ? 'bg-success'
             : 'bg-fg-subtle',
         )}
@@ -150,4 +238,13 @@ function SaveIndicator({ status }: { status: 'idle' | 'saving' | 'saved' | 'erro
       {label}
     </span>
   )
+}
+
+function rel(ms: number): string {
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s ago`
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.round(m / 60)
+  return `${h}h ago`
 }

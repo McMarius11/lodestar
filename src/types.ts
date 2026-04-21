@@ -17,6 +17,7 @@ export type Dep = {
 export type Feature = {
   id: string
   label: string
+  description?: string
   effort: Effort
   ms: string
   ganttStart: number

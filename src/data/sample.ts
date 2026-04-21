@@ -10,7 +10,7 @@ export const sampleProject: Project = {
     name: 'Nimbus',
     description: 'Self-hosted, end-to-end encrypted cloud storage.',
     version: '0.1.0',
-    schemaVersion: 1,
+    schemaVersion: 2,
     today: 4,
     milestones: [
       { id: 'v0.1', label: 'Foundation' },
@@ -29,6 +29,7 @@ export const sampleProject: Project = {
         {
           id: 'api',
           label: 'HTTP API Server',
+          description: 'The backbone HTTP layer everything else mounts on. Fastify-style router, structured logs, per-route rate limits, OpenAPI generated from handlers. **Not** a REST framework — each module owns its own route file.',
           effort: 'L',
           ms: 'v0.1',
           ganttStart: 0,
@@ -44,6 +45,7 @@ export const sampleProject: Project = {
         {
           id: 'auth',
           label: 'Auth & Sessions',
+          description: 'Session cookies, CSRF protection, Argon2id password hashing, sliding refresh window. No OAuth for v0.1 — that lands in v0.3 once the core is stable.',
           effort: 'M',
           ms: 'v0.1',
           ganttStart: 2,
@@ -78,6 +80,7 @@ export const sampleProject: Project = {
         {
           id: 'blobs',
           label: 'Blob Store',
+          description: 'Content-addressed layout on disk: `blobs/<sha256[0..2]>/<sha256[2..]>`. Chunked uploads with resumability, GC sweep once a day. Deliberately dumb — no encryption here, that lives in the Crypto module.',
           effort: 'L',
           ms: 'v0.2',
           ganttStart: 4,
@@ -110,6 +113,7 @@ export const sampleProject: Project = {
         {
           id: 'crypto',
           label: 'Client-side Encryption',
+          description: 'XChaCha20-Poly1305 via libsodium, per-file content keys wrapped with a user master key. Master key derived from Argon2id of the passphrase. Rotation by re-wrapping — content keys never change.',
           effort: 'XL',
           ms: 'v0.2',
           ganttStart: 5,
@@ -145,6 +149,7 @@ export const sampleProject: Project = {
         {
           id: 'sync-engine',
           label: 'Sync Engine',
+          description: 'Core diff/apply loop. Local SQLite state DB, per-file change journal, delta protocol over HTTP/2. Target: sync 10k files in under 30s cold, under 3s warm.',
           effort: 'XL',
           ms: 'v0.3',
           ganttStart: 7,

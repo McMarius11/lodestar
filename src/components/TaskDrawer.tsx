@@ -112,6 +112,11 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
             onChange={(e) => updateFeature(feat.id, { label: e.target.value })}
             className="ser-display text-3xl text-fg w-full outline-none bg-transparent"
           />
+          <DescriptionField
+            key={feat.id}
+            value={feat.description ?? ''}
+            onCommit={(v) => updateFeature(feat.id, { description: v })}
+          />
           <div className="flex items-center gap-4 mt-3">
             <EffortBadge effort={feat.effort} />
             <span className="label-mono">
@@ -354,6 +359,82 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
       </div>
     </div>
   )
+}
+
+function DescriptionField({
+  value,
+  onCommit,
+}: {
+  value: string
+  onCommit: (v: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  const [mode, setMode] = useState<'write' | 'preview'>(value ? 'preview' : 'write')
+
+  useEffect(() => {
+    setDraft(value)
+  }, [value])
+
+  const commit = () => {
+    if (draft !== value) onCommit(draft)
+  }
+
+  if (mode === 'preview' && draft) {
+    return (
+      <div className="mt-3">
+        <div
+          onClick={() => setMode('write')}
+          className="cursor-text text-sm text-fg-muted whitespace-pre-wrap border-l-2 border-line/60 pl-3 hover:border-accent transition-colors"
+          title="Click to edit"
+          dangerouslySetInnerHTML={{ __html: renderInlineMd(draft) }}
+        />
+        <button
+          onClick={() => setMode('write')}
+          className="label-mono text-fg-subtle hover:text-fg mt-1"
+        >
+          EDIT
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-3">
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          commit()
+          if (draft) setMode('preview')
+        }}
+        placeholder="Description — plain text or minimal markdown (**bold** _italic_ `code`)…"
+        rows={3}
+        className="w-full bg-sunken/30 border border-line/40 focus:border-accent px-3 py-2 text-sm outline-none resize-y placeholder:text-fg-subtle"
+      />
+      {draft && (
+        <button
+          onClick={() => {
+            commit()
+            setMode('preview')
+          }}
+          className="label-mono text-fg-subtle hover:text-fg mt-1"
+        >
+          PREVIEW
+        </button>
+      )}
+    </div>
+  )
+}
+
+function renderInlineMd(text: string): string {
+  const esc = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  return esc
+    .replace(/`([^`]+)`/g, '<code class="num-mono text-accent">$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-fg">$1</strong>')
+    .replace(/\b_([^_]+)_\b/g, '<em>$1</em>')
 }
 
 function DepStatusDot({

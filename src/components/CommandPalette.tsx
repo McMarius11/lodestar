@@ -150,6 +150,19 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     })
 
     list.push({
+      id: 'proj:edit-meta',
+      label: 'Edit Project Meta…',
+      group: 'project',
+      run: () => store.toggleMetaEditor(true),
+    })
+    list.push({
+      id: 'proj:edit-milestones',
+      label: 'Edit Milestones…',
+      hint: `${store.project.meta.milestones.length}`,
+      group: 'project',
+      run: () => store.toggleMilestoneEditor(true),
+    })
+    list.push({
       id: 'proj:rename',
       label: 'Rename Project',
       group: 'project',

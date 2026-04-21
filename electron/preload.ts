@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('projectAPI', {
   exportTo: (payload: unknown): Promise<SaveResult> =>
     ipcRenderer.invoke('project:export', payload),
   importFrom: (): Promise<LoadResult> => ipcRenderer.invoke('project:import'),
+  loadExample: (): Promise<LoadResult> => ipcRenderer.invoke('project:example'),
   onExternalChange: (cb: () => void) => {
     const handler = () => cb()
     ipcRenderer.on('project:external-change', handler)
@@ -29,6 +30,7 @@ declare global {
       save: (payload: unknown) => Promise<SaveResult>
       exportTo: (payload: unknown) => Promise<SaveResult>
       importFrom: () => Promise<LoadResult>
+      loadExample: () => Promise<LoadResult>
       onExternalChange: (cb: () => void) => () => void
     }
   }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, type MenuItemConstructorOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -28,6 +28,13 @@ function dataDir(): string {
 function dataFile(): string {
   return path.join(dataDir(), 'project.json')
 }
+function backupFile(): string {
+  return dataFile() + '.bak'
+}
+
+const ZOOM_STEP = 0.1
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 2.5
 
 let win: BrowserWindow | null = null
 let watcher: FSWatcher | null = null
@@ -37,6 +44,84 @@ async function ensureDataFile(): Promise<void> {
   if (!existsSync(dataDir())) {
     await fs.mkdir(dataDir(), { recursive: true })
   }
+}
+
+function setZoom(delta: number): void {
+  if (!win) return
+  const current = win.webContents.getZoomFactor()
+  const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, current + delta))
+  win.webContents.setZoomFactor(next)
+}
+
+function resetZoom(): void {
+  win?.webContents.setZoomFactor(1)
+}
+
+function buildMenu(): void {
+  const isMac = process.platform === 'darwin'
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { role: 'services' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Zoom In',
+          accelerator: 'CmdOrCtrl+=',
+          click: () => setZoom(ZOOM_STEP),
+        },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CmdOrCtrl+-',
+          click: () => setZoom(-ZOOM_STEP),
+        },
+        {
+          label: 'Actual Size',
+          accelerator: 'CmdOrCtrl+0',
+          click: resetZoom,
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'Window',
+      role: 'windowMenu',
+    },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
 function createWindow(): void {
@@ -52,6 +137,7 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      zoomFactor: 1,
     },
   })
 
@@ -100,6 +186,14 @@ ipcMain.handle('project:save', async (_evt, payload: unknown) => {
   await ensureDataFile()
   try {
     writingOwn = true
+    // Rotating single-slot backup: copy previous file before overwrite.
+    if (existsSync(dataFile())) {
+      try {
+        await fs.copyFile(dataFile(), backupFile())
+      } catch (err) {
+        console.warn('Backup copy failed (non-fatal):', err)
+      }
+    }
     await fs.writeFile(dataFile(), JSON.stringify(payload, null, 2), 'utf-8')
     if (!watcher) startWatcher()
     setTimeout(() => {
@@ -142,8 +236,29 @@ ipcMain.handle('project:import', async () => {
   }
 })
 
+ipcMain.handle('project:example', async () => {
+  const candidates = [
+    path.join(process.env.APP_ROOT!, 'data', 'project.example.json'),
+    process.resourcesPath
+      ? path.join(process.resourcesPath, 'project.example.json')
+      : '',
+  ].filter(Boolean)
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      try {
+        const raw = await fs.readFile(p, 'utf-8')
+        return { ok: true, data: JSON.parse(raw) }
+      } catch {
+        /* try next */
+      }
+    }
+  }
+  return { ok: false, error: 'EXAMPLE_NOT_FOUND' }
+})
+
 app.whenReady().then(async () => {
   await ensureDataFile()
+  buildMenu()
   createWindow()
   startWatcher()
 

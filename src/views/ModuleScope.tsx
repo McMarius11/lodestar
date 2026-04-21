@@ -19,6 +19,9 @@ export function ModuleScope() {
   const activeMs = useProjectStore((s) => s.activeMilestone)
   const activeStatus = useProjectStore((s) => s.activeStatus)
   const addFeature = useProjectStore((s) => s.addFeature)
+  const reorderModules = useProjectStore((s) => s.reorderModules)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
 
   const modules = project.modules.map((m) => ({
     ...m,
@@ -26,6 +29,23 @@ export function ModuleScope() {
       matchesFilters(project, f, activeMs, activeStatus),
     ),
   }))
+
+  const handleDrop = (targetId: string) => {
+    if (!dragId || dragId === targetId) {
+      setDragId(null)
+      setOverId(null)
+      return
+    }
+    const ids = project.modules.map((m) => m.id)
+    const fromIdx = ids.indexOf(dragId)
+    const toIdx = ids.indexOf(targetId)
+    if (fromIdx === -1 || toIdx === -1) return
+    ids.splice(fromIdx, 1)
+    ids.splice(toIdx, 0, dragId)
+    reorderModules(ids)
+    setDragId(null)
+    setOverId(null)
+  }
 
   return (
     <div className="h-full overflow-auto scroll-thin">
@@ -48,7 +68,22 @@ export function ModuleScope() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3">
         {modules.map((m) => (
-          <ModuleCard key={m.id} module={m} onAddFeature={() => addFeature(m.id)} />
+          <ModuleCard
+            key={m.id}
+            module={m}
+            onAddFeature={() => addFeature(m.id)}
+            dragging={dragId === m.id}
+            dragOver={overId === m.id && dragId !== null && dragId !== m.id}
+            onDragStart={() => setDragId(m.id)}
+            onDragEnter={() => {
+              if (dragId && dragId !== m.id) setOverId(m.id)
+            }}
+            onDragEnd={() => {
+              setDragId(null)
+              setOverId(null)
+            }}
+            onDrop={() => handleDrop(m.id)}
+          />
         ))}
       </div>
     </div>
@@ -96,9 +131,21 @@ function Stat({
 function ModuleCard({
   module,
   onAddFeature,
+  dragging,
+  dragOver,
+  onDragStart,
+  onDragEnter,
+  onDragEnd,
+  onDrop,
 }: {
   module: Module
   onAddFeature: () => void
+  dragging: boolean
+  dragOver: boolean
+  onDragStart: () => void
+  onDragEnter: () => void
+  onDragEnd: () => void
+  onDrop: () => void
 }) {
   const openDrawer = useProjectStore((s) => s.openDrawer)
   const project = useProjectStore((s) => s.project)
@@ -112,8 +159,36 @@ function ModuleCard({
   const pct = allTasks.length === 0 ? 0 : done / allTasks.length
 
   return (
-    <div className="border-r border-b border-line/40">
+    <div
+      onDragEnter={onDragEnter}
+      onDragOver={(e) => {
+        if (dragOver || dragging) e.preventDefault()
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        onDrop()
+      }}
+      className={clsx(
+        'border-r border-b border-line/40 transition-all',
+        dragging && 'opacity-40',
+        dragOver && 'bg-accent/5 ring-1 ring-accent/60 ring-inset',
+      )}
+    >
       <header className="flex items-center gap-4 px-6 pt-5 pb-3 border-b border-line/40">
+        <span
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData('text/plain', module.id)
+            onDragStart()
+          }}
+          onDragEnd={onDragEnd}
+          className="text-fg-subtle hover:text-fg-muted cursor-grab active:cursor-grabbing label-mono select-none -ml-2 pr-1"
+          title="Drag to reorder module"
+          aria-label="Drag to reorder"
+        >
+          ⋮⋮
+        </span>
         <button
           ref={swatchRef}
           onClick={(e) => {
@@ -240,6 +315,17 @@ function TaskRow({
 }) {
   const toggle = useProjectStore((s) => s.toggleTask)
   const deleteTask = useProjectStore((s) => s.deleteTask)
+  const updateTask = useProjectStore((s) => s.updateTask)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(task.label)
+
+  const commit = () => {
+    const v = draft.trim()
+    if (v && v !== task.label) updateTask(featureId, task.id, { label: v })
+    else setDraft(task.label)
+    setEditing(false)
+  }
+
   return (
     <li className="group flex items-center gap-3 py-1">
       <button
@@ -260,14 +346,38 @@ function TaskRow({
           </svg>
         )}
       </button>
-      <span
-        className={clsx(
-          'text-xs flex-1 min-w-0 truncate',
-          task.done ? 'text-fg-subtle line-through' : 'text-fg-muted',
-        )}
-      >
-        {task.label}
-      </span>
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commit()
+            } else if (e.key === 'Escape') {
+              setDraft(task.label)
+              setEditing(false)
+            }
+          }}
+          className="text-xs flex-1 min-w-0 bg-transparent outline-none border-b border-accent text-fg"
+        />
+      ) : (
+        <span
+          onDoubleClick={() => {
+            setDraft(task.label)
+            setEditing(true)
+          }}
+          title="Double-click to rename"
+          className={clsx(
+            'text-xs flex-1 min-w-0 truncate cursor-text',
+            task.done ? 'text-fg-subtle line-through' : 'text-fg-muted',
+          )}
+        >
+          {task.label}
+        </span>
+      )}
       <button
         onClick={() => deleteTask(featureId, task.id)}
         className="label-mono text-fg-subtle opacity-0 group-hover:opacity-100 hover:text-danger"

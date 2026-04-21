@@ -61,19 +61,19 @@ migrated or rejected instead of silently corrupting state.
 
 ### Getting started
 
-`data/project.json` is git-ignored so it doesn't clobber your work.
-To seed a fresh checkout, copy the bundled example:
+`data/project.json` is git-ignored so it doesn't clobber your work. On
+first launch the app shows a welcome screen with three options:
 
-```bash
-cp data/project.example.json data/project.json
-```
+- drop a `.json` file to import an existing project,
+- start empty (just pick a name),
+- or seed the `Nimbus` example — a self-hosted cloud storage project
+  with 6 modules, 5 milestones and a couple of intentional dep
+  conflicts so the validation panel has something to show.
 
-The example (`Nimbus`) is a self-hosted cloud storage project with
-6 modules, 5 milestones and a couple of intentional dep conflicts so
-the validation panel has something to show.
+The most recent files are remembered for quick re-opening.
 
-If `data/project.json` is missing, the app falls back to the same sample
-data in memory — so you can also just run it and export later.
+Before every save the previous file is copied to `project.json.bak`
+(single rolling slot) so a bad write is always recoverable.
 
 ## Keyboard
 
@@ -81,6 +81,7 @@ data in memory — so you can also just run it and export later.
 | --- | --- |
 | Command palette | ⌘K / Ctrl+K |
 | Undo / Redo | ⌘Z / ⇧⌘Z |
+| Zoom UI | ⌘= / ⌘- / ⌘0 (also Ctrl+wheel) |
 | Close drawer / palette | Esc |
 
 ## Editing with Claude

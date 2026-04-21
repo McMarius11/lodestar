@@ -6,7 +6,11 @@ import { TaskDrawer } from '@/components/TaskDrawer'
 import { CommandPalette } from '@/components/CommandPalette'
 import { HelpOverlay } from '@/components/HelpOverlay'
 import { ValidationPanel } from '@/components/ValidationPanel'
+import { WelcomeScreen } from '@/components/WelcomeScreen'
+import { ExternalChangeBanner } from '@/components/ExternalChangeBanner'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useKeyboardNav } from '@/lib/useKeyboardNav'
+import { useWebZoom } from '@/lib/useWebZoom'
 import { ModuleScope } from '@/views/ModuleScope'
 import { Roadmap } from '@/views/Roadmap'
 import { Kanban } from '@/views/Kanban'
@@ -16,6 +20,7 @@ import { Gantt } from '@/views/Gantt'
 export default function App() {
   const init = useProjectStore((s) => s.init)
   const loaded = useProjectStore((s) => s.loaded)
+  const source = useProjectStore((s) => s.source)
   const activeView = useProjectStore((s) => s.activeView)
 
   useEffect(() => {
@@ -23,6 +28,7 @@ export default function App() {
   }, [init])
 
   useKeyboardNav()
+  useWebZoom()
 
   if (!loaded) {
     return (
@@ -32,9 +38,18 @@ export default function App() {
     )
   }
 
+  if (source === 'none') {
+    return (
+      <div className="h-full flex flex-col">
+        <WelcomeScreen />
+      </div>
+    )
+  }
+
   return (
     <div className="h-full flex flex-col grain">
       <TopBar />
+      <ExternalChangeBanner />
       <main className="flex-1 min-h-0 relative">
         <AnimatePresence mode="wait">
           <motion.div
@@ -45,12 +60,24 @@ export default function App() {
             transition={{ duration: 0.15 }}
             className="absolute inset-0"
           >
-            {activeView === 'scope' && <ModuleScope />}
-            {activeView === 'roadmap' && <Roadmap />}
-            {activeView === 'kanban' && <Kanban />}
-            {activeView === 'mindmap' && <MindMap />}
-            {activeView === 'gantt' && <Gantt />}
-            {activeView === 'validate' && <ValidationPanel />}
+            {activeView === 'scope' && (
+              <ErrorBoundary label="Module Scope"><ModuleScope /></ErrorBoundary>
+            )}
+            {activeView === 'roadmap' && (
+              <ErrorBoundary label="Roadmap"><Roadmap /></ErrorBoundary>
+            )}
+            {activeView === 'kanban' && (
+              <ErrorBoundary label="Kanban"><Kanban /></ErrorBoundary>
+            )}
+            {activeView === 'mindmap' && (
+              <ErrorBoundary label="Mind Map"><MindMap /></ErrorBoundary>
+            )}
+            {activeView === 'gantt' && (
+              <ErrorBoundary label="Gantt"><Gantt /></ErrorBoundary>
+            )}
+            {activeView === 'validate' && (
+              <ErrorBoundary label="Validation"><ValidationPanel /></ErrorBoundary>
+            )}
           </motion.div>
         </AnimatePresence>
       </main>
