@@ -24,6 +24,32 @@ npm run build
 npm run electron:build # produces AppImage / exe / dmg
 ```
 
+## Architecture
+
+One store, one JSON file, five views. No backend.
+
+```
+data/project.example.json   seed sample (checked in)
+data/project.json           working copy (git-ignored)
+electron/                   main process, IPC, file watcher
+src/types.ts                Project / Module / Feature / Dep / Task
+src/schema.ts               Zod schema + migrate()
+src/store/                  Zustand + Immer (50-step undo)
+src/lib/deps.ts             depStatus, isBlocked, blockedBy, findCycles
+src/views/                  ModuleScope · Roadmap · Kanban · MindMap · Gantt
+src/components/             shared UI (TaskDrawer, CommandPalette, filters)
+```
+
+In the desktop build, Electron's main process owns the filesystem:
+it reads and writes `data/project.json` via IPC and watches the file
+for external edits, so the UI reloads when anything else (editor,
+agent, `git checkout`) rewrites it. In the browser build the same
+persistence layer falls back to `localStorage`.
+
+The long-form design doc lives in [`CLAUDE.md`](./CLAUDE.md) (German),
+and [`AGENTS.md`](./AGENTS.md) is the English entry point for AI
+coding agents.
+
 ## Data
 
 Everything lives in `data/project.json`. Edit it in the UI or let Claude
