@@ -13,7 +13,7 @@ import { CURRENT_SCHEMA_VERSION, migrate } from '@/schema'
 import { sampleProject } from '@/data/sample'
 import { lodestarRoadmap } from '@/data/lodestarRoadmap'
 import { newId, slugId } from '@/lib/id'
-import { featureStatus } from '@/lib/deps'
+import { featureStatus, findFeature, moduleOf } from '@/lib/deps'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -38,6 +38,11 @@ type State = {
   history: Project[]
   future: Project[]
   mindmapOverrides: Record<string, { x: number; y: number }>
+  depEditor: {
+    fromId: string
+    toId: string
+    anchor: { x: number; y: number }
+  } | null
 }
 
 type Actions = {
@@ -68,6 +73,7 @@ type Actions = {
   setFeatureGantt: (featureId: string, range: { start: number; end: number }) => void
   setKanbanRank: (featureId: string, rank: number) => void
   normalizeKanbanRanks: () => void
+  setFeatureColumn: (featureId: string, col: 'backlog' | 'progress' | 'done', rank?: number) => void
 
   addDep: (featureId: string, dep: Dep) => void
   updateDep: (featureId: string, depId: string, patch: Partial<Dep>) => void
@@ -84,6 +90,9 @@ type Actions = {
   pinMindmapPositions: () => void
   clearMindmapPositions: () => void
   closeCurrentProject: () => void
+
+  openDepEditor: (fromId: string, toId: string, anchor: { x: number; y: number }) => void
+  closeDepEditor: () => void
 
   updateMeta: (patch: Partial<Project['meta']>) => void
   addMilestone: (id: string, label: string) => void
@@ -110,7 +119,16 @@ const HISTORY_LIMIT = 50
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 export const useProjectStore = create<State & Actions>()(
-  immer((set, get) => ({
+  immer((set, get) => {
+    // commit = push-undo → mutate → debounced-persist.
+    // Use for every data-level mutation. UI-only state (flags, filters, cursor)
+    // uses `set` directly so it stays out of the undo history.
+    const commit = (mutator: Parameters<typeof set>[0]) => {
+      get()._pushHistory()
+      set(mutator)
+      get()._persist()
+    }
+    return {
     project: {
       meta: {
         name: '',
@@ -138,6 +156,7 @@ export const useProjectStore = create<State & Actions>()(
     history: [],
     future: [],
     mindmapOverrides: {},
+    depEditor: null,
 
     init: async () => {
       const loaded = await loadProject()
@@ -182,33 +201,27 @@ export const useProjectStore = create<State & Actions>()(
     importFromText: (text) => {
       const p = importProjectFromText(text)
       if (!p) return false
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         s.project = p
         s.source = 'disk'
       })
-      get()._persist()
       return true
     },
 
     loadSample: () => {
       const p = migrate(sampleProject)
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         s.project = p
         s.source = 'disk'
       })
-      get()._persist()
     },
 
     loadLodestarRoadmap: () => {
       const p = migrate(lodestarRoadmap)
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         s.project = p
         s.source = 'disk'
       })
-      get()._persist()
     },
 
     startEmptyProject: (name) => {
@@ -222,12 +235,10 @@ export const useProjectStore = create<State & Actions>()(
         },
         modules: [],
       }
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         s.project = empty
         s.source = 'disk'
       })
-      get()._persist()
     },
 
     closeCurrentProject: () => {
@@ -249,8 +260,18 @@ export const useProjectStore = create<State & Actions>()(
         s.paletteOpen = false
         s.cursorFeatureId = null
         s.mindmapOverrides = {}
+        s.depEditor = null
       })
     },
+
+    // ———————————————————————————————————————————————————————
+    // UI state (filters, overlays, cursor). These are not undoable.
+    // ———————————————————————————————————————————————————————
+    openDepEditor: (fromId, toId, anchor) =>
+      set((s) => {
+        s.depEditor = { fromId, toId, anchor }
+      }),
+    closeDepEditor: () => set((s) => void (s.depEditor = null)),
 
     setActiveView: (v) => set((s) => void (s.activeView = v)),
     setActiveMilestone: (ms) => set((s) => void (s.activeMilestone = ms)),
@@ -266,86 +287,61 @@ export const useProjectStore = create<State & Actions>()(
     toggleMetaEditor: (open) =>
       set((s) => void (s.metaEditorOpen = open ?? !s.metaEditorOpen)),
 
+    // ———————————————————————————————————————————————————————
+    // Tasks (per feature). All go through commit() for undo + persist.
+    // ———————————————————————————————————————————————————————
     setAllTasksDone: (featureId, done) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            if (done && f.tasks.length === 0) {
-              f.tasks.push({ id: newId('t'), label: 'Done', done: true })
-            } else {
-              for (const t of f.tasks) t.done = done
-            }
-            break
-          }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        if (done && f.tasks.length === 0) {
+          f.tasks.push({ id: newId('t'), label: 'Done', done: true })
+        } else {
+          for (const t of f.tasks) t.done = done
         }
       })
-      get()._persist()
     },
 
     toggleTask: (featureId, taskId) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            const t = f.tasks.find((x) => x.id === taskId)
-            if (t) t.done = !t.done
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        const t = f.tasks.find((x) => x.id === taskId)
+        if (t) t.done = !t.done
       })
-      get()._persist()
     },
 
     addTask: (featureId, label) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            f.tasks.push({ id: newId('t'), label, done: false })
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        f.tasks.push({ id: newId('t'), label, done: false })
       })
-      get()._persist()
     },
 
     updateTask: (featureId, taskId, patch) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            const t = f.tasks.find((x) => x.id === taskId)
-            if (t) Object.assign(t, patch)
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        const t = f.tasks.find((x) => x.id === taskId)
+        if (t) Object.assign(t, patch)
       })
-      get()._persist()
     },
 
     deleteTask: (featureId, taskId) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            f.tasks = f.tasks.filter((x) => x.id !== taskId)
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        f.tasks = f.tasks.filter((x) => x.id !== taskId)
       })
-      get()._persist()
     },
 
+    // ———————————————————————————————————————————————————————
+    // Features: CRUD, move, rank, gantt range.
+    // ———————————————————————————————————————————————————————
     addFeature: (moduleId, partial) => {
       const id = partial?.id ?? slugId(partial?.label ?? 'feature')
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         const m = s.project.modules.find((x) => x.id === moduleId)
         if (!m) return
         m.features.push({
@@ -361,7 +357,6 @@ export const useProjectStore = create<State & Actions>()(
           rank: partial?.rank,
         })
       })
-      get()._persist()
       return id
     },
 
@@ -388,13 +383,11 @@ export const useProjectStore = create<State & Actions>()(
         tasks: sourceFeature.tasks.map((t) => ({ ...t, id: newId('t') })),
         rank: undefined,
       }
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         const m = s.project.modules.find((x) => x.id === sourceModuleId)
         if (!m) return
         m.features.splice(sourceIndex + 1, 0, clone)
       })
-      get()._persist()
       return newFeatureId
     },
 
@@ -402,20 +395,10 @@ export const useProjectStore = create<State & Actions>()(
       const project = get().project
       const target = project.modules.find((m) => m.id === targetModuleId)
       if (!target) return
-      let source: Module | null = null
-      let feat: Feature | null = null
-      for (const m of project.modules) {
-        const f = m.features.find((x) => x.id === featureId)
-        if (f) {
-          source = m
-          feat = f
-          break
-        }
-      }
-      if (!source || !feat || source.id === targetModuleId) return
-      get()._pushHistory()
-      set((s) => {
-        const src = s.project.modules.find((m) => m.id === source!.id)
+      const sourceModuleId = moduleOf(project, featureId)
+      if (!sourceModuleId || sourceModuleId === targetModuleId) return
+      commit((s) => {
+        const src = s.project.modules.find((m) => m.id === sourceModuleId)
         const tgt = s.project.modules.find((m) => m.id === targetModuleId)
         if (!src || !tgt) return
         const moved = src.features.find((f) => f.id === featureId)
@@ -423,21 +406,13 @@ export const useProjectStore = create<State & Actions>()(
         src.features = src.features.filter((f) => f.id !== featureId)
         tgt.features.push(moved)
       })
-      get()._persist()
     },
 
     moveFeatureToMs: (featureId, ms) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            f.ms = ms
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (f) f.ms = ms
       })
-      get()._persist()
     },
 
     reorderFeatureInModule: (featureId, targetIndex) => {
@@ -453,8 +428,7 @@ export const useProjectStore = create<State & Actions>()(
         }
       }
       if (!modId || sourceIndex < 0) return
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         const m = s.project.modules.find((x) => x.id === modId)
         if (!m) return
         const [moved] = m.features.splice(sourceIndex, 1)
@@ -462,37 +436,57 @@ export const useProjectStore = create<State & Actions>()(
         const clamped = Math.max(0, Math.min(targetIndex, m.features.length))
         m.features.splice(clamped, 0, moved)
       })
-      get()._persist()
     },
 
     setFeatureGantt: (featureId, { start, end }) => {
       if (end <= start) end = start + 1
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            f.ganttStart = Math.max(0, Math.round(start))
-            f.ganttEnd = Math.max(f.ganttStart + 1, Math.round(end))
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        f.ganttStart = Math.max(0, Math.round(start))
+        f.ganttEnd = Math.max(f.ganttStart + 1, Math.round(end))
       })
-      get()._persist()
     },
 
     setKanbanRank: (featureId, rank) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            f.rank = rank
-            break
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (f) f.rank = rank
+      })
+    },
+
+    setFeatureColumn: (featureId, col, rank) => {
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        if (col === 'done') {
+          if (f.tasks.length === 0) {
+            f.tasks.push({ id: newId('t'), label: 'Done', done: true })
+          } else {
+            for (const t of f.tasks) t.done = true
+          }
+        } else if (col === 'backlog') {
+          // 0 tasks already means backlog; otherwise open everything
+          if (f.tasks.length > 0) {
+            for (const t of f.tasks) t.done = false
+          }
+        } else {
+          // progress: need at least 1 done AND at least 1 open
+          if (f.tasks.length === 0) {
+            f.tasks.push({ id: newId('t'), label: 'Kickoff', done: true })
+            f.tasks.push({ id: newId('t'), label: 'Next step', done: false })
+          } else if (f.tasks.length === 1) {
+            f.tasks[0].done = true
+            f.tasks.push({ id: newId('t'), label: 'Next step', done: false })
+          } else {
+            const doneCount = f.tasks.filter((t) => t.done).length
+            if (doneCount === 0) f.tasks[0].done = true
+            else if (doneCount === f.tasks.length)
+              f.tasks[f.tasks.length - 1].done = false
           }
         }
+        if (typeof rank === 'number') f.rank = rank
       })
-      get()._persist()
     },
 
     normalizeKanbanRanks: () => {
@@ -500,8 +494,7 @@ export const useProjectStore = create<State & Actions>()(
       const byStatus: Record<string, Feature[]> = { backlog: [], progress: [], done: [] }
       for (const m of project.modules) {
         for (const f of m.features) {
-          const st = featureStatus(f)
-          byStatus[st].push(f)
+          byStatus[featureStatus(f)].push(f)
         }
       }
       for (const key of Object.keys(byStatus)) {
@@ -514,13 +507,8 @@ export const useProjectStore = create<State & Actions>()(
       set((s) => {
         for (const key of Object.keys(byStatus)) {
           byStatus[key].forEach((ref, i) => {
-            for (const m of s.project.modules) {
-              const f = m.features.find((x) => x.id === ref.id)
-              if (f) {
-                f.rank = i + 1
-                break
-              }
-            }
+            const f = findFeature(s.project, ref.id)
+            if (f) f.rank = i + 1
           })
         }
       })
@@ -528,22 +516,14 @@ export const useProjectStore = create<State & Actions>()(
     },
 
     updateFeature: (featureId, patch) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            Object.assign(f, patch)
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (f) Object.assign(f, patch)
       })
-      get()._persist()
     },
 
     deleteFeature: (featureId) => {
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         for (const m of s.project.modules) {
           m.features = m.features.filter((x) => x.id !== featureId)
           for (const f of m.features) {
@@ -552,56 +532,41 @@ export const useProjectStore = create<State & Actions>()(
         }
         if (s.drawerFeatureId === featureId) s.drawerFeatureId = null
       })
-      get()._persist()
     },
 
+    // ———————————————————————————————————————————————————————
+    // Dependencies: add/update/remove on a feature.
+    // ———————————————————————————————————————————————————————
     addDep: (featureId, dep) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            if (!f.deps.find((d) => d.id === dep.id)) f.deps.push(dep)
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        if (!f.deps.find((d) => d.id === dep.id)) f.deps.push(dep)
       })
-      get()._persist()
     },
 
     updateDep: (featureId, depId, patch) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            const d = f.deps.find((x) => x.id === depId)
-            if (d) Object.assign(d, patch)
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        const d = f.deps.find((x) => x.id === depId)
+        if (d) Object.assign(d, patch)
       })
-      get()._persist()
     },
 
     removeDep: (featureId, depId) => {
-      get()._pushHistory()
-      set((s) => {
-        for (const m of s.project.modules) {
-          const f = m.features.find((x) => x.id === featureId)
-          if (f) {
-            f.deps = f.deps.filter((d) => d.id !== depId)
-            break
-          }
-        }
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (f) f.deps = f.deps.filter((d) => d.id !== depId)
       })
-      get()._persist()
     },
 
+    // ———————————————————————————————————————————————————————
+    // Modules: CRUD + reorder + clone.
+    // ———————————————————————————————————————————————————————
     addModule: (partial) => {
       const id = partial?.id ?? slugId(partial?.label ?? 'module')
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         s.project.modules.push({
           id,
           label: partial?.label ?? 'New Module',
@@ -609,22 +574,18 @@ export const useProjectStore = create<State & Actions>()(
           features: partial?.features ?? [],
         })
       })
-      get()._persist()
       return id
     },
 
     updateModule: (moduleId, patch) => {
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         const m = s.project.modules.find((x) => x.id === moduleId)
         if (m) Object.assign(m, patch)
       })
-      get()._persist()
     },
 
     deleteModule: (moduleId) => {
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         const removed = s.project.modules.find((m) => m.id === moduleId)
         const removedIds = new Set((removed?.features ?? []).map((f) => f.id))
         s.project.modules = s.project.modules.filter((m) => m.id !== moduleId)
@@ -634,7 +595,6 @@ export const useProjectStore = create<State & Actions>()(
           }
         }
       })
-      get()._persist()
     },
 
     reorderModules: (ids) => {
@@ -649,9 +609,7 @@ export const useProjectStore = create<State & Actions>()(
         if (!ids.includes(m.id)) next.push(m)
       }
       if (next.length !== current.length) return
-      get()._pushHistory()
-      set((s) => void (s.project.modules = next))
-      get()._persist()
+      commit((s) => void (s.project.modules = next))
     },
 
     cloneModule: (moduleId) => {
@@ -672,14 +630,15 @@ export const useProjectStore = create<State & Actions>()(
           rank: undefined,
         })),
       }
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         s.project.modules.splice(idx + 1, 0, clone)
       })
-      get()._persist()
       return newModId
     },
 
+    // ———————————————————————————————————————————————————————
+    // MindMap positions: session overrides (volatile) + pinned (persisted).
+    // ———————————————————————————————————————————————————————
     setMindmapOverride: (featureId, point) => {
       set((s) => {
         if (point === null) delete s.mindmapOverrides[featureId]
@@ -697,42 +656,36 @@ export const useProjectStore = create<State & Actions>()(
       const existing = project.meta.mindmapPositions ?? {}
       const merged: Record<string, { x: number; y: number }> = { ...existing }
       for (const [k, v] of Object.entries(mindmapOverrides)) merged[k] = v
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         s.project.meta.mindmapPositions = merged
         s.mindmapOverrides = {}
       })
-      get()._persist()
     },
 
     clearMindmapPositions: () => {
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         delete s.project.meta.mindmapPositions
         s.mindmapOverrides = {}
       })
-      get()._persist()
     },
 
+    // ———————————————————————————————————————————————————————
+    // Project meta + milestones.
+    // ———————————————————————————————————————————————————————
     updateMeta: (patch) => {
-      get()._pushHistory()
-      set((s) => void Object.assign(s.project.meta, patch))
-      get()._persist()
+      commit((s) => void Object.assign(s.project.meta, patch))
     },
 
     addMilestone: (id, label) => {
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         if (!s.project.meta.milestones.find((m) => m.id === id)) {
           s.project.meta.milestones.push({ id, label })
         }
       })
-      get()._persist()
     },
 
     updateMilestone: (id, patch) => {
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         const ms = s.project.meta.milestones.find((m) => m.id === id)
         if (!ms) return
         const oldId = ms.id
@@ -747,17 +700,17 @@ export const useProjectStore = create<State & Actions>()(
           if (s.activeMilestone === oldId) s.activeMilestone = patch.id
         }
       })
-      get()._persist()
     },
 
     deleteMilestone: (id) => {
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         s.project.meta.milestones = s.project.meta.milestones.filter((m) => m.id !== id)
       })
-      get()._persist()
     },
 
+    // ———————————————————————————————————————————————————————
+    // Undo / redo. History is a stack of deep-cloned snapshots.
+    // ———————————————————————————————————————————————————————
     undo: () => {
       const { history, project } = get()
       if (history.length === 0) return
@@ -782,6 +735,9 @@ export const useProjectStore = create<State & Actions>()(
       get()._persist()
     },
 
+    // ———————————————————————————————————————————————————————
+    // Import / export.
+    // ———————————————————————————————————————————————————————
     exportFile: async () => {
       await exportProject(get().project)
     },
@@ -789,14 +745,15 @@ export const useProjectStore = create<State & Actions>()(
     importFile: async () => {
       const imported = await importProject()
       if (!imported) return
-      get()._pushHistory()
-      set((s) => {
+      commit((s) => {
         s.project = imported
         s.source = 'disk'
       })
-      get()._persist()
     },
 
+    // ———————————————————————————————————————————————————————
+    // Internal primitives (do not call from views — use commit() above).
+    // ———————————————————————————————————————————————————————
     _pushHistory: () => {
       const snapshot = JSON.parse(JSON.stringify(get().project)) as Project
       set((s) => {
@@ -823,7 +780,8 @@ export const useProjectStore = create<State & Actions>()(
         }
       }, 400)
     },
-  })),
+    }
+  }),
 )
 
 function isInputFocused(): boolean {

@@ -125,6 +125,9 @@ function buildMenu(): void {
 }
 
 function createWindow(): void {
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(process.cwd(), 'build', 'icon.png')
   win = new BrowserWindow({
     width: 1480,
     height: 920,
@@ -133,6 +136,7 @@ function createWindow(): void {
     backgroundColor: '#0A0A0C',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,

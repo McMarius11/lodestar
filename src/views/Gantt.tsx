@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useProjectStore } from '@/store/useProjectStore'
+import { useFilteredFeatures } from '@/hooks/useFilteredFeatures'
 import {
   blockedBy,
   completion,
   featureIndex,
   featureStatus,
   hasConflict,
-  matchesFilters,
 } from '@/lib/deps'
-import type { Feature, Module } from '@/types'
+import type { Feature } from '@/types'
 import { EffortBadge } from '@/components/EffortBadge'
 import { useContextMenu } from '@/components/ContextMenu'
-import { featureMenu, useFeatureActionsApi } from '@/lib/featureActions'
+import { featureMenu } from '@/lib/featureActions'
+import { useFeatureActionsApi } from '@/hooks/useFeatureActionsApi'
+import { useGanttLayout } from '@/hooks/useGanttLayout'
 
 const ROW_H = 36
 const HEADER_H = 64
@@ -23,9 +25,8 @@ const WEEK_W_MAX = 80
 const WEEK_W_DEFAULT = 44
 
 export function Gantt() {
-  const project = useProjectStore((s) => s.project)
-  const activeMs = useProjectStore((s) => s.activeMilestone)
-  const activeStatus = useProjectStore((s) => s.activeStatus)
+  const { project, modules: filteredModules, activeMilestone: activeMs } =
+    useFilteredFeatures()
   const openDrawer = useProjectStore((s) => s.openDrawer)
   const hoveredRef = useRef<string | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
@@ -46,53 +47,14 @@ export function Gantt() {
   } | null>(null)
 
   const modules = useMemo(
-    () =>
-      project.modules.map((m) => ({
-        ...m,
-        features: m.features.filter((f) =>
-          matchesFilters(project, f, activeMs, activeStatus),
-        ),
-      })),
-    [project, activeMs, activeStatus],
+    () => filteredModules.map(({ module: m, features }) => ({ ...m, features })),
+    [filteredModules],
   )
 
-  const allFeatures = modules.flatMap((m) => m.features)
-  const maxWeek = Math.max(
-    ...allFeatures.map((f) => f.ganttEnd),
-    ...project.meta.milestones.map((_, i, arr) => (i + 1) * 5),
-    20,
-  )
-  const weeks = maxWeek + 2
+  const { rows: layout, featureRows, milestoneBands: msBands, weeks, totalH } =
+    useGanttLayout(modules, project.meta.milestones, ROW_H)
   const timelineW = weeks * WEEK_W
-
-  type Row =
-    | { kind: 'module'; module: Module; y: number }
-    | { kind: 'feature'; feature: Feature; module: Module; y: number }
-  const layout: Row[] = []
-  let y = 0
-  for (const m of modules) {
-    if (m.features.length === 0) continue
-    layout.push({ kind: 'module', module: m, y })
-    y += ROW_H
-    for (const f of m.features) {
-      layout.push({ kind: 'feature', feature: f, module: m, y })
-      y += ROW_H
-    }
-  }
-  const totalH = y
-
   const idx = featureIndex(project)
-  const featureRows = new Map<string, Row & { kind: 'feature' }>()
-  for (const r of layout) if (r.kind === 'feature') featureRows.set(r.feature.id, r)
-
-  // Build milestone bands
-  const msBands = project.meta.milestones.map((ms, i) => {
-    const features = allFeatures.filter((f) => f.ms === ms.id)
-    if (features.length === 0) return null
-    const start = Math.min(...features.map((f) => f.ganttStart))
-    const end = Math.max(...features.map((f) => f.ganttEnd))
-    return { ms, start, end, index: i }
-  }).filter(Boolean) as { ms: { id: string; label: string }; start: number; end: number; index: number }[]
 
   const today = project.meta.today
 
@@ -321,9 +283,20 @@ export function Gantt() {
                   </span>
                 </div>
               ) : (
-                <button
+                <div
                   key={`lf-${r.feature.id}`}
-                  onClick={() => openDrawer(r.feature.id)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('[data-stop-row-open]')) return
+                    openDrawer(r.feature.id)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      openDrawer(r.feature.id)
+                    }
+                  }}
                   onContextMenu={(e) => {
                     e.preventDefault()
                     ctx.openAt(e.clientX, e.clientY, featureMenu(api, r.feature))
@@ -339,14 +312,15 @@ export function Gantt() {
                     }
                   }}
                   className={clsx(
-                    'absolute left-0 right-0 px-6 pl-10 flex items-center gap-3 border-b border-line/30 text-left hover:bg-raised/40 transition-colors',
+                    'absolute left-0 right-0 px-6 pl-10 flex items-center gap-3 border-b border-line/30 text-left hover:bg-raised/40 transition-colors cursor-pointer focus:outline-none focus-visible:bg-raised/40',
                     hovered === r.feature.id && 'bg-raised/40',
                   )}
                   style={{ top: r.y, height: ROW_H }}
                 >
                   <span className="text-sm truncate flex-1">{r.feature.label}</span>
+                  <MsPickerPill feature={r.feature} />
                   <EffortBadge effort={r.feature.effort} className="shrink-0" />
-                </button>
+                </div>
               ),
             )}
           </div>
@@ -645,5 +619,37 @@ export function Gantt() {
       </div>
       {ctx.menu}
     </div>
+  )
+}
+
+function MsPickerPill({ feature }: { feature: Feature }) {
+  const project = useProjectStore((s) => s.project)
+  const moveFeatureToMs = useProjectStore((s) => s.moveFeatureToMs)
+  const ctx = useContextMenu()
+  return (
+    <>
+      <button
+        data-stop-row-open
+        onClick={(e) => {
+          e.stopPropagation()
+          const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+          ctx.openAt(
+            r.left,
+            r.bottom + 4,
+            project.meta.milestones.map((ms) => ({
+              kind: 'action' as const,
+              label: `${ms.id} — ${ms.label}`,
+              disabled: ms.id === feature.ms,
+              run: () => moveFeatureToMs(feature.id, ms.id),
+            })),
+          )
+        }}
+        title="Change milestone"
+        className="label-mono num-mono text-accent shrink-0 px-1.5 py-0.5 border border-line/40 hover:border-accent/70 hover:bg-accent/5 transition-colors"
+      >
+        {feature.ms}
+      </button>
+      {ctx.menu}
+    </>
   )
 }

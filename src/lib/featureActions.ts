@@ -1,6 +1,7 @@
-import type { Feature, Module, Project } from '@/types'
+import type { Dep, Feature, Module, Project } from '@/types'
 import type { CtxMenuItem } from '@/components/ContextMenu'
 import { featureStatus } from '@/lib/deps'
+import { newId } from '@/lib/id'
 
 const MODULE_COLORS = [
   '#8A867A',
@@ -20,7 +21,7 @@ type Api = {
   deleteFeature: (id: string) => void
   moveFeatureToModule: (id: string, targetModuleId: string) => void
   moveFeatureToMs: (id: string, ms: string) => void
-  setAllTasksDone: (id: string, done: boolean) => void
+  setFeatureColumn: (id: string, col: 'backlog' | 'progress' | 'done') => void
   addTask: (id: string, label: string) => void
   toggleTask: (featureId: string, taskId: string) => void
   updateFeature: (id: string, patch: Partial<Feature>) => void
@@ -30,6 +31,9 @@ type Api = {
   updateModule: (id: string, patch: Partial<Module>) => void
   addModule: (partial?: Partial<Module>) => string
   toggleMilestoneEditor: (open?: boolean) => void
+  addDep: (featureId: string, dep: Dep) => void
+  removeDep: (featureId: string, depId: string) => void
+  openDepEditor: (fromId: string, toId: string, anchor: { x: number; y: number }) => void
 }
 
 export function featureMenu(api: Api, feature: Feature): CtxMenuItem[] {
@@ -50,6 +54,29 @@ export function featureMenu(api: Api, feature: Feature): CtxMenuItem[] {
     label: `${ms.id} — ${ms.label}`,
     disabled: ms.id === f.ms,
     run: () => api.moveFeatureToMs(f.id, ms.id),
+  }))
+
+  const existingDepIds = new Set(f.deps.map((d) => d.id))
+  const depCandidates: CtxMenuItem[] = project.modules
+    .flatMap((m) => m.features.map((x) => ({ feat: x, modLabel: m.label })))
+    .filter((x) => x.feat.id !== f.id)
+    .map((x) => ({
+      kind: 'action' as const,
+      label: `${x.feat.id} — ${x.feat.label}`,
+      hint: x.modLabel,
+      disabled: existingDepIds.has(x.feat.id),
+      run: () =>
+        api.openDepEditor(f.id, x.feat.id, {
+          x: window.innerWidth / 2 - 150,
+          y: window.innerHeight / 2 - 110,
+        }),
+    }))
+
+  const removeDepItems: CtxMenuItem[] = f.deps.map((d) => ({
+    kind: 'action' as const,
+    label: `${d.id} — ${d.reason || '(no reason)'}`,
+    hint: d.type,
+    run: () => api.removeDep(f.id, d.id),
   }))
 
   const status = featureStatus(f)
@@ -95,6 +122,20 @@ export function featureMenu(api: Api, feature: Feature): CtxMenuItem[] {
         msItems.every((it) => it.kind === 'action' && it.disabled),
       items: msItems,
     },
+    {
+      kind: 'submenu',
+      label: 'Add dependency to',
+      disabled:
+        depCandidates.length === 0 ||
+        depCandidates.every((it) => it.kind === 'action' && it.disabled),
+      items: depCandidates,
+    },
+    {
+      kind: 'submenu',
+      label: 'Remove dependency',
+      disabled: removeDepItems.length === 0,
+      items: removeDepItems,
+    },
     { kind: 'separator' },
     {
       kind: 'submenu',
@@ -104,31 +145,19 @@ export function featureMenu(api: Api, feature: Feature): CtxMenuItem[] {
           kind: 'action',
           label: 'Backlog',
           disabled: status === 'backlog',
-          run: () => api.setAllTasksDone(f.id, false),
+          run: () => api.setFeatureColumn(f.id, 'backlog'),
         },
         {
           kind: 'action',
           label: 'In Progress',
           disabled: status === 'progress',
-          run: () => {
-            if (f.tasks.length === 0) {
-              api.addTask(f.id, 'Kickoff')
-              return
-            }
-            if (status === 'backlog') {
-              const first = f.tasks[0]
-              if (first) api.toggleTask(f.id, first.id)
-            } else if (status === 'done') {
-              const last = f.tasks[f.tasks.length - 1]
-              if (last) api.toggleTask(f.id, last.id)
-            }
-          },
+          run: () => api.setFeatureColumn(f.id, 'progress'),
         },
         {
           kind: 'action',
           label: 'Done',
           disabled: status === 'done',
-          run: () => api.setAllTasksDone(f.id, true),
+          run: () => api.setFeatureColumn(f.id, 'done'),
         },
       ],
     },
@@ -219,6 +248,7 @@ export type EmptyContext =
   | { kind: 'roadmap-column'; ms: string }
   | { kind: 'roadmap-header' }
   | { kind: 'kanban-column'; col: 'backlog' | 'progress' | 'done' }
+  | { kind: 'mindmap-empty' }
 
 export function emptyAreaMenu(api: Api, ctx: EmptyContext): CtxMenuItem[] {
   const firstModule = api.project.modules[0]
@@ -282,6 +312,31 @@ export function emptyAreaMenu(api: Api, ctx: EmptyContext): CtxMenuItem[] {
       },
     ]
   }
+  if (ctx.kind === 'mindmap-empty') {
+    const moduleItems: CtxMenuItem[] = api.project.modules.map((m) => ({
+      kind: 'action' as const,
+      label: m.label,
+      run: () => {
+        const id = api.addFeature(m.id)
+        api.openDrawer(id)
+      },
+    }))
+    return [
+      {
+        kind: 'submenu',
+        label: 'New feature in…',
+        disabled: moduleItems.length === 0,
+        items: moduleItems,
+      },
+      {
+        kind: 'action',
+        label: 'New module',
+        run: () => {
+          api.addModule()
+        },
+      },
+    ]
+  }
   // kanban-column
   return [
     {
@@ -292,7 +347,12 @@ export function emptyAreaMenu(api: Api, ctx: EmptyContext): CtxMenuItem[] {
         if (!firstModule) return
         const partial: Partial<Feature> = {}
         if (ctx.col === 'done') {
-          partial.tasks = [{ id: 't-seed', label: 'Done', done: true }]
+          partial.tasks = [{ id: newId('t'), label: 'Done', done: true }]
+        } else if (ctx.col === 'progress') {
+          partial.tasks = [
+            { id: newId('t'), label: 'Kickoff', done: true },
+            { id: newId('t'), label: 'Next step', done: false },
+          ]
         }
         const id = api.addFeature(firstModule.id, partial)
         api.openDrawer(id)
@@ -302,42 +362,3 @@ export function emptyAreaMenu(api: Api, ctx: EmptyContext): CtxMenuItem[] {
 }
 
 export type FeatureActionsApi = Api
-
-import { useProjectStore } from '@/store/useProjectStore'
-
-export function useFeatureActionsApi(): Api {
-  const project = useProjectStore((s) => s.project)
-  const openDrawer = useProjectStore((s) => s.openDrawer)
-  const cloneFeature = useProjectStore((s) => s.cloneFeature)
-  const deleteFeature = useProjectStore((s) => s.deleteFeature)
-  const moveFeatureToModule = useProjectStore((s) => s.moveFeatureToModule)
-  const moveFeatureToMs = useProjectStore((s) => s.moveFeatureToMs)
-  const setAllTasksDone = useProjectStore((s) => s.setAllTasksDone)
-  const addTask = useProjectStore((s) => s.addTask)
-  const toggleTask = useProjectStore((s) => s.toggleTask)
-  const updateFeature = useProjectStore((s) => s.updateFeature)
-  const addFeature = useProjectStore((s) => s.addFeature)
-  const cloneModule = useProjectStore((s) => s.cloneModule)
-  const deleteModule = useProjectStore((s) => s.deleteModule)
-  const updateModule = useProjectStore((s) => s.updateModule)
-  const addModule = useProjectStore((s) => s.addModule)
-  const toggleMilestoneEditor = useProjectStore((s) => s.toggleMilestoneEditor)
-  return {
-    project,
-    openDrawer,
-    cloneFeature,
-    deleteFeature,
-    moveFeatureToModule,
-    moveFeatureToMs,
-    setAllTasksDone,
-    addTask,
-    toggleTask,
-    updateFeature,
-    addFeature,
-    cloneModule,
-    deleteModule,
-    updateModule,
-    addModule,
-    toggleMilestoneEditor,
-  }
-}

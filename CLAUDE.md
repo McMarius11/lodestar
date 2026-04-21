@@ -1,5 +1,9 @@
 # Lodestar – Claude Code Spec
 
+> **Code-Struktur-Brief:** Für Architektur, Store-Invarianten, Hooks/Lib-Trennung
+> und „Wie füge ich X hinzu" siehe [`AI_README.md`](./AI_README.md). Dieses File
+> hier ist Produkt- + Daten-Spec; `AI_README.md` ist Code-Map.
+
 ## Was ist das?
 
 Ein lokales Projekt-Planungs-Tool speziell für Software-Projekte.

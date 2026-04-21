@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { useProjectStore } from '@/store/useProjectStore'
-import { matchesFilters } from './deps'
+import { matchesFilters } from '@/lib/deps'
 import type { ViewId } from '@/types'
 
 const viewMap: Record<string, ViewId> = {

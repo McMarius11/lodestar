@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { useProjectStore } from '@/store/useProjectStore'
 import {
   completion,
+  featureIndex,
   featureStatus,
   hasConflict,
   isBlocked,
@@ -12,11 +13,8 @@ import { StatusGlyph } from '@/components/StatusGlyph'
 import { EffortBadge } from '@/components/EffortBadge'
 import { ProgressBar } from '@/components/ProgressBar'
 import { useContextMenu } from '@/components/ContextMenu'
-import {
-  emptyAreaMenu,
-  featureMenu,
-  useFeatureActionsApi,
-} from '@/lib/featureActions'
+import { emptyAreaMenu, featureMenu } from '@/lib/featureActions'
+import { useFeatureActionsApi } from '@/hooks/useFeatureActionsApi'
 import type { Feature } from '@/types'
 
 export function Roadmap() {
@@ -25,6 +23,7 @@ export function Roadmap() {
   const activeStatus = useProjectStore((s) => s.activeStatus)
   const openDrawer = useProjectStore((s) => s.openDrawer)
   const moveFeatureToMs = useProjectStore((s) => s.moveFeatureToMs)
+  const setActiveStatus = useProjectStore((s) => s.setActiveStatus)
   const ctx = useContextMenu()
   const api = useFeatureActionsApi()
   const [dragId, setDragId] = useState<string | null>(null)
@@ -81,7 +80,16 @@ export function Roadmap() {
               }}
               onDrop={(e) => {
                 e.preventDefault()
-                if (dragId) moveFeatureToMs(dragId, ms.id)
+                if (dragId) {
+                  moveFeatureToMs(dragId, ms.id)
+                  if (activeStatus !== 'all') {
+                    const next = useProjectStore.getState().project
+                    const moved = featureIndex(next).get(dragId)
+                    if (moved && !matchesStatus(next, moved, activeStatus)) {
+                      setActiveStatus('all')
+                    }
+                  }
+                }
                 setDragId(null)
                 setHotMs(null)
               }}
