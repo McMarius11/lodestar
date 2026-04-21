@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --void: 10 10 12;
+    --base: 17 17 19;
+    --raised: 23 23 27;
+    --sunken: 8 8 10;
+    --line: 58 58 64;
+    --line-strong: 85 85 90;
+    --fg: 245 242 232;
+    --fg-muted: 138 134 122;
+    --fg-subtle: 90 87 78;
+    --accent: 255 90 31;
+    --success: 155 229 58;
+    --warn: 255 193 59;
+    --danger: 255 56 96;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    font-family:
+      'Geist',
+      ui-sans-serif,
+      system-ui,
+      sans-serif;
+    font-feature-settings:
+      'cv11',
+      'ss01',
+      'ss03';
+    background: rgb(var(--void));
+    color: rgb(var(--fg));
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: rgb(var(--accent) / 0.4);
+    color: rgb(var(--fg));
+  }
+
+  *:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1px rgb(var(--accent));
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  input,
+  textarea {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .grain {
+    position: relative;
+  }
+
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.025;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  }
+
+  .hairline-x {
+    background-image: linear-gradient(
+      to right,
+      rgb(var(--line) / 0.4) 0,
+      rgb(var(--line) / 0.4) 100%
+    );
+    background-size: 100% 1px;
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+  }
+
+  .label-mono {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-size: 0.625rem;
+    line-height: 1;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgb(var(--fg-muted));
+  }
+
+  .num-mono {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ser-display {
+    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+
+  .ring-accent {
+    box-shadow: 0 0 0 1px rgb(var(--accent));
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid rgb(var(--line) / 0.6);
+    background: rgb(var(--raised) / 0.6);
+    color: rgb(var(--fg));
+    transition:
+      background 120ms,
+      border-color 120ms,
+      color 120ms;
+  }
+
+  .btn-ghost:hover {
+    background: rgb(var(--raised));
+    border-color: rgb(var(--line-strong) / 0.8);
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgb(var(--accent));
+    color: rgb(var(--void));
+    border: 1px solid rgb(var(--accent));
+    transition: filter 120ms;
+  }
+
+  .btn-primary:hover {
+    filter: brightness(1.08);
+  }
+
+  .scroll-thin::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: rgb(var(--line) / 0.6);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--line-strong));
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+}

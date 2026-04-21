@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-electron
+release
+.vite
+*.log
+.DS_Store
+.env
+.env.local
+
+# typescript incremental build cache
+*.tsbuildinfo
+.tsbuild/
+
+# local project data — use data/project.example.json as starting point
+data/project.json
