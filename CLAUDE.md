@@ -8,11 +8,15 @@
 
 Ein lokales Projekt-Planungs-Tool speziell für Software-Projekte.
 Daten leben in `data/project.json`. Keine Datenbank, kein Backend.
+Aktuelle Version: **v0.3.0** („Hands on the Data") — die App ist
+durchgehend maus-editierbar: Kontextmenüs in allen fünf Views, Drag & Drop
+in Roadmap/Kanban/Gantt/MindMap, Undo-Tiefe bis 50.
 
 ## Stack
 
 - Vite + React 18 + TypeScript (strict)
-- Zustand + Immer (State, 50-Step Undo)
+- Zustand + Immer (State, 50-Step Undo, `commit()`-Helper als einziger
+  Data-Mutation-Pfad — siehe `AI_README.md`)
 - Zod (Schema-Validation & Migration)
 - Tailwind CSS
 - Framer Motion (Drawer/Overlay-Transitions)
@@ -39,12 +43,14 @@ type Dep = {
 type Feature = {
   id: string
   label: string
+  description?: string    // Markdown (gerendert via src/lib/markdown.ts)
   effort: Effort
-  ms: string          // Milestone-ID z.B. "v0.1"
-  ganttStart: number  // Woche (0-basiert)
-  ganttEnd: number    // Woche (0-basiert)
+  ms: string              // Milestone-ID z.B. "v0.1"
+  ganttStart: number      // Woche (0-basiert)
+  ganttEnd: number        // Woche (0-basiert)
   deps: Dep[]
   tasks: Task[]
+  rank?: number           // persistente Kanban-Sortierung innerhalb Spalte (v3)
 }
 
 type Module = {
@@ -63,19 +69,26 @@ type ProjectMeta = {
   name: string
   description: string
   version: string
-  schemaVersion: number       // Migration-Version, siehe src/schema.ts
+  schemaVersion: number                                       // aktuell 3
   milestones: Milestone[]
-  today?: number              // Optional: Gantt-Heute-Marker (Woche)
+  today?: number                                              // Gantt-Heute-Marker (Woche)
+  mindmapPositions?: Record<string, { x: number; y: number }> // angepinnte Node-Positionen
 }
 
 type Project = {
   meta: ProjectMeta
   modules: Module[]
 }
+
+type FeatureStatus = 'backlog' | 'progress' | 'done'
+type DepStatus = 'done' | 'conflict' | 'same' | 'open' | 'unknown'
+type ViewId = 'scope' | 'roadmap' | 'kanban' | 'mindmap' | 'gantt' | 'validate'
 ```
 
 Jeder Load- und Save-Pfad läuft durch `migrate()` in `src/schema.ts` —
 alte Shapes werden dort hochgehoben bevor Zod sie endgültig validiert.
+Aktuelle Schema-Version: **3** (v1 → v2 fügte Milestones ein,
+v2 → v3 machte `feature.rank` persistent).
 
 ## File-Struktur
 
@@ -88,49 +101,75 @@ alte Shapes werden dort hochgehoben bevor Zod sie endgültig validiert.
 │   └── preload.ts              ← window.projectAPI Bridge
 ├── scripts/
 │   └── generate-notices.mjs    ← erzeugt THIRD_PARTY_NOTICES.md
+├── build/                      ← App-Icons (Quelle + gerastert)
+├── public/
+│   └── favicon.svg
 ├── src/
-│   ├── App.tsx                 ← Layout, Tab-Switching, Shortcuts
+│   ├── App.tsx                 ← View-Router + globale Overlays (Drawer, Palette, DepEditor)
 │   ├── main.tsx                ← React-Einstieg
 │   ├── index.css               ← Tailwind + @font-face
 │   ├── types.ts                ← Datenmodell (oben)
-│   ├── schema.ts               ← Zod-Schema + migrate()
+│   ├── schema.ts               ← Zod-Schema + migrate() (inkl. schema.test.ts)
 │   ├── store/
-│   │   └── useProjectStore.ts  ← Zustand-Store, Undo/Redo, Auto-Save
-│   ├── lib/
-│   │   ├── deps.ts             ← depStatus, isBlocked, blockedBy, findCycles
+│   │   └── useProjectStore.ts  ← Einziger Zustand-Store. commit()-Helper,
+│   │                             ~100 Actions gruppiert nach Concern
+│   ├── lib/                    ← REIN. Kein React, kein Store-Import. Unit-testbar.
+│   │   ├── deps.ts             ← featureStatus, depStatus, isBlocked, blockedBy,
+│   │   │                         hasConflict, findFeature, featureIndex,
+│   │   │                         moduleOf, matchesFilters, findCycles (+ deps.test.ts)
+│   │   ├── featureActions.ts   ← Pure Factory: Api → CtxMenuItem[] (Feature/Module/EmptyArea)
 │   │   ├── persistence.ts      ← load/save/export/import (Electron | localStorage)
-│   │   ├── validate.ts         ← Lint-Regeln für den Validation-Panel
+│   │   ├── validate.ts         ← Lint-Regeln für den Validation-Panel (+ validate.test.ts)
 │   │   ├── markdown.ts         ← winziger Markdown-Parser für Beschreibungen
-│   │   ├── useKeyboardNav.ts   ← Pfeiltasten-Navigation
-│   │   └── id.ts               ← nanoid-Wrapper
+│   │   └── id.ts               ← nanoid-Wrapper (newId, slugId)
+│   ├── hooks/                  ← React-Hooks. Dürfen Store + lib nutzen.
+│   │   ├── useFilteredFeatures.ts   ← DIE Stelle an der MS- + Status-Filter greifen
+│   │   ├── useFeatureActionsApi.ts  ← Bridge vom Store zur Menu-Factory
+│   │   ├── useMindmapLayout.ts      ← Radial-Layout-Mathe
+│   │   ├── useGanttLayout.ts        ← Row-Stacking + Milestone-Bänder
+│   │   ├── useKeyboardNav.ts        ← globale Shortcuts
+│   │   └── useWebZoom.ts            ← Browser-only Font-Scale-Persistenz
 │   ├── data/
-│   │   └── sample.ts           ← Fallback wenn kein project.json
-│   ├── components/
-│   │   ├── TopBar.tsx
-│   │   ├── CommandPalette.tsx  ← ⌘K
-│   │   ├── HelpOverlay.tsx     ← ?
-│   │   ├── MilestoneFilter.tsx ← Globaler MS-Filter
-│   │   ├── StatusFilter.tsx    ← Ready / Blocked / Conflict
-│   │   ├── StatusGlyph.tsx
-│   │   ├── EffortBadge.tsx
-│   │   ├── ProgressBar.tsx
-│   │   ├── TaskDrawer.tsx      ← Wiederverwendet in Roadmap + Gantt
-│   │   ├── ModuleEditor.tsx
-│   │   └── ValidationPanel.tsx ← zeigt Cycles, Conflicts, Dangling Deps
+│   │   ├── sample.ts                ← Nimbus Sample-Project
+│   │   └── lodestarRoadmap.ts       ← Lodestars eigenes Dogfood-Project
+│   ├── components/             ← Wiederverwendbare UI
+│   │   ├── TopBar.tsx               ← Tabs, Filter, Save-Indicator, + New…-Menu
+│   │   ├── CommandPalette.tsx       ← ⌘K / „/"
+│   │   ├── HelpOverlay.tsx          ← „?"
+│   │   ├── ContextMenu.tsx          ← Portal-Primitiv mit Submenüs + Viewport-Aware
+│   │   ├── ErrorBoundary.tsx        ← pro View um Crashes abzufangen
+│   │   ├── ExternalChangeBanner.tsx ← wenn File-Watcher externe Änderungen sieht
+│   │   ├── WelcomeScreen.tsx        ← erster Start / Close-Project-Flow
+│   │   ├── DepEditorPopover.tsx     ← Dep-Reason/Type editieren (Singleton über App)
+│   │   ├── MilestoneFilter.tsx      ← globaler MS-Filter
+│   │   ├── StatusFilter.tsx         ← Ready / Blocked / Conflict
+│   │   ├── MilestoneEditor.tsx      ← zentrierter Modal
+│   │   ├── ModuleEditor.tsx         ← zentrierter Modal
+│   │   ├── ProjectMetaEditor.tsx    ← Name/Version/Beschreibung
+│   │   ├── TaskDrawer.tsx           ← Wiederverwendet in allen Views
+│   │   ├── ValidationPanel.tsx      ← Cycles, Conflicts, Dangling Deps
+│   │   ├── StatusGlyph.tsx, EffortBadge.tsx, ProgressBar.tsx
 │   └── views/
 │       ├── ModuleScope.tsx     ← Modul-Cards mit Feature-Rows
-│       ├── Roadmap.tsx         ← Milestone-Spalten
-│       ├── Kanban.tsx          ← Backlog / In Progress / Done
-│       ├── MindMap.tsx         ← SVG, radial
-│       └── Gantt.tsx           ← Wochen-Balken + Dep-Pfeile
+│       ├── Roadmap.tsx         ← Milestone-Spalten (DnD)
+│       ├── Kanban.tsx          ← Backlog / In Progress / Done (DnD + Rank)
+│       ├── MindMap.tsx         ← SVG, radial, Node-Drag
+│       └── Gantt.tsx           ← Wochen-Balken + Dep-Pfeile, Bar-Drag + Resize
 ```
 
 ## Dep-Logik (`src/lib/deps.ts`)
 
 ```typescript
+type FeatureStatus = 'backlog' | 'progress' | 'done'
 type DepStatus = 'done' | 'conflict' | 'same' | 'open' | 'unknown'
 
-// Status einer einzelnen Dep berechnen
+// Status eines Features aus den Tasks ableiten
+function featureStatus(f: Feature): FeatureStatus
+
+// Fortschritt: { done, total, pct }
+function completion(f: Feature): { done: number; total: number; pct: number }
+
+// Status einer einzelnen Dep
 function depStatus(project: Project, feat: Feature, dep: Dep): DepStatus
 // done     = Dep-Feature 100% fertig
 // conflict = Dep-Feature ist in SPÄTEREM Milestone → Warnung!
@@ -138,14 +177,22 @@ function depStatus(project: Project, feat: Feature, dep: Dep): DepStatus
 // open     = Dep-Feature ist in früherem Milestone aber noch nicht fertig
 // unknown  = Dep-ID zeigt auf ein nicht existierendes Feature
 
-// Ist ein Feature momentan blockiert? (optional-Deps zählen nicht)
+// Blockade-Check (optional-Deps zählen nicht)
 function isBlocked(project: Project, feat: Feature): boolean
-
-// Welche Features blockieren es? (gibt die Feature-Objekte zurück)
 function blockedBy(project: Project, feat: Feature): Feature[]
-
-// Hat dieses Feature mindestens eine Dep im späteren MS?
 function hasConflict(project: Project, feat: Feature): boolean
+
+// Lookup-Helfer
+function findFeature(project: Project, id: string): Feature | null
+function featureIndex(project: Project): Map<string, Feature>
+function moduleOf(project: Project, featureId: string): string | null
+function milestoneOrder(project: Project): Map<string, number>
+
+// Filter-Pipeline (globale MS- + Status-Filter)
+type StatusFilter = 'all' | 'ready' | 'blocked' | 'conflict'
+function matchesStatus(project: Project, feat: Feature, filter: StatusFilter): boolean
+function matchesFilters(project: Project, feat: Feature,
+                        ms: string | 'all', status: StatusFilter): boolean
 
 // Topologischer Zyklus-Check für den Validation-Panel
 function findCycles(project: Project): { cycles: string[][] }
@@ -153,37 +200,45 @@ function findCycles(project: Project): { cycles: string[][] }
 
 ## Views – Verhalten
 
+Seit v0.3 hat **jeder** View Rechtsklick-Kontextmenüs (Open, Rename, Duplicate,
+Move to Module/Milestone, Set Status, Copy ID, Delete). Die Item-Listen kommen
+aus `src/lib/featureActions.ts` — eine Factory, fünf Aufrufer.
+
 ### Module Scope
 - Grid der Module, jedes als Card mit Feature-Rows
 - Pro Feature: Label | Effort-Badge | done/total | Progress-Bar
-- Click auf Feature → Tasks expandieren (inline)
+- **Single-Click → Drawer**, `▸`-Chevron togglt Inline-Tasks
+- Rechtsklick Feature/Modul/leere Fläche → jeweiliges Kontextmenü
 - **Keine Dep-Info sichtbar** – bewusst clean gehalten
 
 ### Roadmap
 - Milestone-Spalten (gefiltert via globalem Filter)
 - Features als klickbare Balken in ihrer Spalte
 - Kleines `⚠` Symbol am Balken wenn Dep-Konflikt (Dep in späterem MS)
-- Click → Task-Drawer öffnet sich darunter
-- Task-Drawer zeigt: Tasks (abhakbar) + Dep-Hinweis falls Konflikt
+- **Drag & Drop zwischen Milestone-Spalten** → `moveFeatureToMs`
+- Click → Task-Drawer
 
 ### Kanban
 - 3 Spalten: Backlog / In Progress / Done
 - Sortierbar nach Modul oder Effort
-- Milestone-Filter aktiv → maximal ~20 Karten sichtbar
+- **Drag & Drop innerhalb und zwischen Spalten**, Reihenfolge persistiert
+  über `feature.rank` im JSON (Schema v3). Float-Drift triggert
+  `normalizeKanbanRanks()` auf ganzzahlige Reindizierung.
 - Blockierte Karte: amber Border + eine Zeile `wartet auf: X, Y`
-- **Keine Dep-Details darüber hinaus**
 
 ### Mind Map
 - SVG, auto-generiert aus gefilterten Daten
 - Module radial um Zentrum, Features als kleinere Nodes
-- Read-only – kein Editing hier
+- **Drag-bare Nodes** — Overrides sind Session-State (`mindmapOverrides`).
+  Pinnen promotet sie in `project.meta.mindmapPositions` (persistent).
+- Wheel zoomt, Drag auf leerer Fläche pant
 
 ### Gantt
 - Horizontale Balken pro Feature, gruppiert nach Modul
 - Zeitachse in Wochen (aus `ganttStart`/`ganttEnd` im JSON)
 - Gestrichelte Finish-to-Start Pfeile für Dependencies
 - Heute-Marker aus `meta.today` (Woche, optional)
-- Click → Task-Drawer
+- **Bar-Drag (horizontal verschieben) + rechte Resize-Kante** → `setFeatureGantt`
 - **Das ist der einzige View wo Deps vollständig visualisiert werden**
 
 ## Persistenz
@@ -201,7 +256,9 @@ Im Desktop-Build läuft Laden/Speichern über Electron-IPC
 
 `electron/main.ts` beobachtet die Datei mit `fs.watch` und schickt
 `project:external-change`, wenn jemand anders (z.B. Claude Code) sie
-editiert – die UI lädt dann neu.
+editiert. Wenn gerade ein Drawer offen ist, wird der Reload deferred
+(`externalChangePending`) und der User entscheidet wann er pullt —
+dafür gibt's den `ExternalChangeBanner`.
 
 ## GitHub / Deployment
 
@@ -221,6 +278,14 @@ npm run build                   # dist/
 ```
 Daten über `localStorage`, Import/Export als JSON-File.
 
+### Tests
+```bash
+npm run typecheck               # strict tsc, kein Emit
+npm test                        # Vitest — deckt deps.ts, validate.ts, schema.ts ab (37 Tests)
+```
+Views sind nicht component-getestet; interaktives Verhalten wird über
+Playwright-Skripte manuell verifiziert.
+
 ## Wie man das mit Claude bearbeitet
 
 Claude kann `data/project.json` direkt lesen und schreiben.
@@ -239,11 +304,12 @@ Die laufende App lädt den neuen Stand automatisch über den File-Watcher.
 
 ## Was NICHT gebaut wird (v1)
 
-- Drag & Drop in Kanban
 - Multi-User / Collaboration
 - Backend / Datenbank
 - Treemap View
 - Epic → Story → Task View
 - Auto-Scheduling (Milestones automatisch verschieben bei Dep-Konflikten)
+- Mehrfach-Selection (Ctrl+Click) für Bulk-Operations
+- Touch-Optimierung (Desktop-first)
 
 Diese Features kommen in v2 wenn der Grundaufbau steht.
