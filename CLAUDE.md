@@ -155,6 +155,14 @@ v2 → v3 machte `feature.rank` persistent).
 │       ├── Kanban.tsx          ← Backlog / In Progress / Done (DnD + Rank)
 │       ├── MindMap.tsx         ← SVG, radial, Node-Drag
 │       └── Gantt.tsx           ← Wochen-Balken + Dep-Pfeile, Bar-Drag + Resize
+└── tests/
+    └── playwright/             ← Python-Playwright-Harness (Konventionen in AI_PLAYWRIGHT.md)
+        ├── _lib.py             ← Seed, Bootstrap, DnD-Helfer, wait_idle, DialogHandler
+        ├── smoke.py            ← 13-Test Quick-Check
+        ├── run_all.py          ← Aggregator über alle test_*.py
+        ├── test_*.py           ← 17 Feature-Suiten (topbar, palette, kontextmenüs,
+        │                         drawer, editoren, 5 views, undo, keyboard, persistence)
+        └── FINDINGS.md         ← Test-Pass-Bugs/UX-Funde (harness-scoped)
 ```
 
 ## Dep-Logik (`src/lib/deps.ts`)
@@ -280,11 +288,16 @@ Daten über `localStorage`, Import/Export als JSON-File.
 
 ### Tests
 ```bash
-npm run typecheck               # strict tsc, kein Emit
-npm test                        # Vitest — deckt deps.ts, validate.ts, schema.ts ab (37 Tests)
+npm run typecheck                               # strict tsc, kein Emit
+npm test                                        # Vitest — deps.ts, validate.ts, schema.ts (53 Tests)
+python3 tests/playwright/smoke.py <dev-url>     # 13-Test Smoke-Suite (Quick-Check)
+python3 tests/playwright/run_all.py <dev-url>   # 17 Feature-Suiten (~2–3 min)
 ```
-Views sind nicht component-getestet; interaktives Verhalten wird über
-Playwright-Skripte manuell verifiziert.
+Unit-Tests decken pure `src/lib/`-Module. Die Playwright-Harness deckt
+interaktives Verhalten aller Views, Kontextmenüs, DnD, Keyboard, Persistenz
+und Undo/Redo ab — Voraussetzung ist ein laufender Dev-Server
+(`npm run dev` oder `npm run electron:dev`). Harness-Konventionen stehen
+in [`AI_PLAYWRIGHT.md`](./AI_PLAYWRIGHT.md).
 
 ## Wie man das mit Claude bearbeitet
 
@@ -313,3 +326,21 @@ Die laufende App lädt den neuen Stand automatisch über den File-Watcher.
 - Touch-Optimierung (Desktop-first)
 
 Diese Features kommen in v2 wenn der Grundaufbau steht.
+
+## Planungs- und Review-Dokumente
+
+Über diese Spec hinaus leben im Repo-Root zwei lebende Planungsdateien —
+wenn der User „bau v0.4" oder „mach die UX glatter" sagt, hier zuerst
+nachsehen:
+
+- [`UX_FINDINGS.md`](./UX_FINDINGS.md) — 50+ UX-Observations aus dem
+  Playwright-Testpass, gruppiert nach Kategorie, mit den dicken Hebeln
+  für einen Polish-Release am Ende.
+- [`FEATURE_WISHLIST.md`](./FEATURE_WISHLIST.md) — neue Feature-Kandidaten
+  (Multi-Select, Tags, Permalinks, Date-Picker, Activity-Log, …) mit
+  Impact-Rating, Größen-Schätzung und einem v0.4 / v0.5 / v1.0 / v2
+  Roadmap-Vorschlag.
+
+`tests/playwright/FINDINGS.md` dagegen ist harness-scoped (was hat der
+Testpass gefunden + was ist behoben); die beiden Root-Dateien sind
+produkt-scoped.
