@@ -195,6 +195,14 @@ export function Kanban() {
               )}
             >
               <header
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  ctx.openAt(
+                    e.clientX,
+                    e.clientY,
+                    emptyAreaMenu(api, { kind: 'kanban-column', col: col.id }),
+                  )
+                }}
                 className={clsx(
                   'flex items-baseline gap-3 px-6 pt-5 pb-3 border-b transition-colors',
                   isHot ? 'border-accent' : 'border-line/60',

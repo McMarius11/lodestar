@@ -107,10 +107,20 @@ export function Roadmap() {
                 isHot && 'bg-accent/5',
               )}
             >
-              <div className={clsx(
-                'px-6 pt-5 pb-4 border-b transition-colors',
-                isHot ? 'border-accent' : 'border-line/60',
-              )}>
+              <div
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  ctx.openAt(
+                    e.clientX,
+                    e.clientY,
+                    emptyAreaMenu(api, { kind: 'roadmap-column', ms: ms.id }),
+                  )
+                }}
+                className={clsx(
+                  'px-6 pt-5 pb-4 border-b transition-colors',
+                  isHot ? 'border-accent' : 'border-line/60',
+                )}
+              >
                 <div className="flex items-baseline gap-3">
                   <span className="num-mono text-accent text-lg">{ms.id}</span>
                   <span className="label-mono text-fg-muted">

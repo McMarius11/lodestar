@@ -80,7 +80,13 @@ export function ModuleScope() {
         ctx.openAt(e.clientX, e.clientY, emptyAreaMenu(api, { kind: 'scope' }))
       }}
     >
-      <div className="px-8 pt-8 pb-6 border-b border-line/40">
+      <div
+        onContextMenu={(e) => {
+          e.preventDefault()
+          ctx.openAt(e.clientX, e.clientY, emptyAreaMenu(api, { kind: 'scope' }))
+        }}
+        className="px-8 pt-8 pb-6 border-b border-line/40"
+      >
         <div className="flex items-end justify-between gap-6">
           <div>
             <div className="label-mono mb-3">

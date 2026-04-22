@@ -339,21 +339,27 @@ export const useProjectStore = create<State & Actions>()(
 
     loadSample: () => {
       const p = migrate(sampleProject)
-      commit((s) => {
+      set((s) => {
         s.project = p
         s.source = 'disk'
         s.currentPath = null
+        s.history = []
+        s.future = []
       })
+      get()._persist()
       markDefaultSlotOpened(p.meta.name)
     },
 
     loadLodestarRoadmap: () => {
       const p = migrate(lodestarRoadmap)
-      commit((s) => {
+      set((s) => {
         s.project = p
         s.source = 'disk'
         s.currentPath = null
+        s.history = []
+        s.future = []
       })
+      get()._persist()
       markDefaultSlotOpened(p.meta.name)
     },
 
@@ -368,11 +374,14 @@ export const useProjectStore = create<State & Actions>()(
         },
         modules: [],
       }
-      commit((s) => {
+      set((s) => {
         s.project = empty
         s.source = 'disk'
         s.currentPath = null
+        s.history = []
+        s.future = []
       })
+      get()._persist()
       markDefaultSlotOpened(empty.meta.name)
     },
 
