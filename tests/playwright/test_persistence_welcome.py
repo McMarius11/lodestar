@@ -3,6 +3,7 @@ renders the onboarding state."""
 from __future__ import annotations
 
 import json
+import pathlib
 import sys
 
 from playwright.sync_api import Page
@@ -16,6 +17,10 @@ from _lib import (
     run_suite,
     wait_idle,
 )
+
+REPO = pathlib.Path(__file__).resolve().parents[2]
+SEED_PATH = REPO / "data" / "project.example.json"
+RECENTS_KEY = "lodestar:recent-files"
 
 
 def test_welcome_appears_with_empty_storage(page: Page) -> None:
@@ -44,6 +49,48 @@ def test_try_nimbus_loads_sample(page: Page) -> None:
 TESTS_EMPTY = [
     test_welcome_appears_with_empty_storage,
     test_try_nimbus_loads_sample,
+]
+
+
+def test_default_slot_recent_can_be_removed_and_reopened(page: Page) -> None:
+    seed = json.loads(SEED_PATH.read_text())
+    recent = [{"name": "Nimbus local slot", "when": 123}]
+    last = {"path": None, "when": 123}
+    page.evaluate(
+        """([project, last, recents, lsKey, lastKey, recentsKey]) => {
+            localStorage.setItem(lsKey, JSON.stringify(project))
+            localStorage.setItem(lastKey, JSON.stringify(last))
+            localStorage.setItem(recentsKey, JSON.stringify(recents))
+        }""",
+        [seed, last, recent, LS_KEY, LAST_SESSION_KEY, RECENTS_KEY],
+    )
+    page.reload(wait_until="networkidle")
+
+    row = page.locator("button", has_text="Nimbus local slot").first
+    row.wait_for()
+    row.hover()
+    page.locator('[aria-label="Remove Nimbus local slot from recents"]').click()
+    assert page.locator("button", has_text="Nimbus local slot").count() == 0
+
+    page.evaluate(
+        """([project, last, recents, lsKey, lastKey, recentsKey]) => {
+            localStorage.setItem(lsKey, JSON.stringify(project))
+            localStorage.setItem(lastKey, JSON.stringify(last))
+            localStorage.setItem(recentsKey, JSON.stringify(recents))
+        }""",
+        [seed, last, recent, LS_KEY, LAST_SESSION_KEY, RECENTS_KEY],
+    )
+    page.reload(wait_until="networkidle")
+
+    page.locator("button", has_text="Nimbus local slot").first.click()
+    page.wait_for_selector('[data-testid="view-scope"]')
+    h1 = page.locator("h1").first.inner_text()
+    assert h1 == "Nimbus", h1
+    log("default-slot recent can be removed and reopened from Welcome")
+
+
+TESTS_RECENTS = [
+    test_default_slot_recent_can_be_removed_and_reopened,
 ]
 
 
@@ -100,7 +147,8 @@ TESTS_SEEDED = [
 
 if __name__ == "__main__":
     # Run the two suites back-to-back — first empty-LS, then seeded.
-    # rc1 covers Welcome; rc2 covers the save pipeline.
+    # rc1 covers Welcome; rc2 covers default-slot recents; rc3 covers save pipeline.
     rc1 = run_suite(__file__, TESTS_EMPTY, no_seed=True, skip_bootstrap=True)
-    rc2 = run_suite(__file__, TESTS_SEEDED)
-    sys.exit(rc1 or rc2)
+    rc2 = run_suite(__file__, TESTS_RECENTS, no_seed=True, skip_bootstrap=True)
+    rc3 = run_suite(__file__, TESTS_SEEDED)
+    sys.exit(rc1 or rc2 or rc3)

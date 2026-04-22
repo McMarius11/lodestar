@@ -69,6 +69,7 @@ type State = {
 type Actions = {
   init: () => Promise<void>
   openLastSession: () => Promise<boolean>
+  openDefaultProject: () => Promise<boolean>
   openProjectFromPath: (path: string) => Promise<boolean>
   openProjectFromDialog: () => Promise<boolean>
   openProjectFromText: (text: string, opts?: { name?: string; path?: string }) => boolean
@@ -250,6 +251,10 @@ export const useProjectStore = create<State & Actions>()(
       if (last?.path) return get().openProjectFromPath(last.path)
       // No remembered path (browser build, or first-ever Electron boot that
       // somehow wrote an unpathed entry) — fall back to the canonical slot.
+      return get().openDefaultProject()
+    },
+
+    openDefaultProject: async () => {
       const loaded = await loadProject()
       if (loaded.status !== 'ok') return false
       set((s) => {
@@ -258,8 +263,9 @@ export const useProjectStore = create<State & Actions>()(
         s.currentPath = null
         s.saveStatus = 'saved'
         s.savedAt = Date.now()
+        s.externalChangePending = false
       })
-      saveLastSession({ path: null, when: Date.now() })
+      markDefaultSlotOpened(loaded.project.meta.name)
       return true
     },
 

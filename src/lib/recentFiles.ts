@@ -9,7 +9,7 @@ const MAX_RECENTS = 5
 
 function sameEntry(a: Recent, b: Recent): boolean {
   if (a.path && b.path) return a.path === b.path
-  return !a.path && !b.path && a.name === b.name
+  return !a.path && !b.path
 }
 
 export function upsertRecent(

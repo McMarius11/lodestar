@@ -10,6 +10,7 @@ This file tracks the next product and QA work after the current UX stabilization
 - Fixed narrow-layout regressions in `TopBar`, `ModuleScope`, `Footer`, and `Kanban`.
 - Fixed mobile overlay/layout issues in `MindMap` and `Gantt`.
 - Normalized Validation copy to English to match the rest of the UI.
+- Fixed Welcome-screen recents for the default slot: deduped pathless entries, made them reopenable, and kept them removable.
 - Added a regression test that keeps view tabs clickable on a narrow viewport.
 
 ## Immediate QA

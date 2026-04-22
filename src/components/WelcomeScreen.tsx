@@ -10,7 +10,11 @@ function basenameOf(p: string): string {
 }
 
 function formatWhen(ts: number): string {
-  return new Date(ts).toISOString().slice(0, 10)
+  const d = new Date(ts)
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
 }
 
 export function WelcomeScreen() {
@@ -18,6 +22,7 @@ export function WelcomeScreen() {
   const openProjectFromDialog = useProjectStore((s) => s.openProjectFromDialog)
   const openProjectFromText = useProjectStore((s) => s.openProjectFromText)
   const openLastSession = useProjectStore((s) => s.openLastSession)
+  const openDefaultProject = useProjectStore((s) => s.openDefaultProject)
   const recentsFn = useProjectStore((s) => s.recents)
   const lastSessionFn = useProjectStore((s) => s.lastSession)
   const forgetRecent = useProjectStore((s) => s.forgetRecent)
@@ -62,15 +67,20 @@ export function WelcomeScreen() {
 
   const onReopenRecent = useCallback(
     async (r: Recent) => {
-      if (!r.path) return
       setError(null)
-      const ok = await openProjectFromPath(r.path)
+      const ok = r.path
+        ? await openProjectFromPath(r.path)
+        : await openDefaultProject()
       if (!ok) {
-        setError(`File moved or deleted: ${r.name}`)
+        setError(
+          r.path
+            ? `File moved or deleted: ${r.name}`
+            : `Could not reopen the default local slot: ${r.name}`,
+        )
         refreshLists()
       }
     },
-    [openProjectFromPath, refreshLists],
+    [openDefaultProject, openProjectFromPath, refreshLists],
   )
 
   const onBrowse = useCallback(async () => {
@@ -251,9 +261,9 @@ export function WelcomeScreen() {
             <div className="label-mono mb-2 text-fg-subtle">RECENT</div>
             <div className="space-y-1">
               {recents.map((r) => {
-                const clickable = Boolean(
-                  r.path && typeof window !== 'undefined' && window.projectAPI,
-                )
+                const clickable = r.path
+                  ? Boolean(typeof window !== 'undefined' && window.projectAPI)
+                  : true
                 const key = (r.path ?? r.name) + r.when
                 if (clickable) {
                   return (
@@ -266,8 +276,15 @@ export function WelcomeScreen() {
                         onClick={() => onReopenRecent(r)}
                         className="flex-1 flex items-center justify-between py-1.5 px-2 text-left"
                       >
-                        <span className="num-mono text-fg group-hover:text-accent truncate">
-                          {r.name}
+                        <span className="min-w-0">
+                          <span className="num-mono text-fg group-hover:text-accent truncate block">
+                            {r.name}
+                          </span>
+                          {!r.path && (
+                            <span className="label-mono text-fg-subtle block mt-0.5">
+                              DEFAULT SLOT
+                            </span>
+                          )}
                         </span>
                         <span className="text-fg-subtle shrink-0 ml-4">
                           {formatWhen(r.when)}
@@ -283,22 +300,11 @@ export function WelcomeScreen() {
                     </div>
                   )
                 }
-                return (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between py-1.5 px-2 hover:bg-raised/40 label-mono"
-                    title="Drop this file again to re-open it (path not captured)"
-                  >
-                    <span className="num-mono text-fg-muted truncate">{r.name}</span>
-                    <span className="text-fg-subtle shrink-0 ml-4">
-                      {formatWhen(r.when)}
-                    </span>
-                  </div>
-                )
+                return null
               })}
             </div>
             <p className="label-mono text-fg-subtle mt-2">
-              Click to re-open · × removes the entry · drop the file again to recapture its path
+              Click to re-open · × removes the entry
             </p>
           </div>
         )}
