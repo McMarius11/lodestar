@@ -7,17 +7,18 @@ This file tracks the next product and QA work after the current UX stabilization
 - Desktop screenshot pass completed for Welcome, Scope, Roadmap, Kanban, MindMap, Gantt, Validation, Command Palette, and Task Drawer.
 - Narrow/mobile screenshot pass completed for Scope, Roadmap, and Kanban.
 - Narrow/mobile screenshot pass completed for MindMap, Gantt, and Validation.
+- Packaged-build visual pass completed for Welcome, all six views, Command Palette, Task Drawer, and the close/reopen flow.
 - Fixed narrow-layout regressions in `TopBar`, `ModuleScope`, `Footer`, and `Kanban`.
 - Fixed mobile overlay/layout issues in `MindMap` and `Gantt`.
 - Normalized Validation copy to English to match the rest of the UI.
 - Fixed Welcome-screen recents for the default slot: deduped pathless entries, made them reopenable, and kept them removable.
+- Fixed Welcome-screen copy for the recent-only state after closing the current project.
 - Added a regression test that keeps view tabs clickable on a narrow viewport.
 
 ## Immediate QA
 
-- Run a manual visual pass on the packaged AppImage.
-- Check Welcome screen, Command Palette, Task Drawer, and close/reopen flows by hand.
-- Verify content correctness in all six views with the real sample data, not only automated checks.
+- Spot-check the final AppImage artifact once more before tagging a patch release.
+- Run a longer-session save-state / external-change pass on the desktop build.
 - Look for clipped text, awkward spacing, hover/focus states, and confusing empty states.
 
 ## UX Follow-Up

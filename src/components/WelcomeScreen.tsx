@@ -55,6 +55,7 @@ export function WelcomeScreen() {
     // entry, if any. Otherwise a generic label.
     return recents[0]?.name ?? 'your last project'
   }, [last, recents])
+  const hasRecentProjects = recents.length > 0
 
   const onContinue = useCallback(async () => {
     setError(null)
@@ -150,12 +151,17 @@ export function WelcomeScreen() {
           <span className="label-mono text-fg-subtle">project planner</span>
         </div>
         <h1 className="ser-display text-5xl md:text-6xl mb-2 leading-none">
-          {continueLabel ? 'Welcome back.' : 'Nothing yet.'}
+          {continueLabel || hasRecentProjects ? 'Welcome back.' : 'Nothing yet.'}
         </h1>
         <p className="text-fg-muted mb-8 max-w-md">
           {continueLabel ? (
             <>
               Pick up where you left off, or open a different{' '}
+              <span className="num-mono text-fg">project.json</span>.
+            </>
+          ) : hasRecentProjects ? (
+            <>
+              Re-open one of your recent projects, or open a different{' '}
               <span className="num-mono text-fg">project.json</span>.
             </>
           ) : (

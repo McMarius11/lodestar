@@ -94,6 +94,32 @@ TESTS_RECENTS = [
 ]
 
 
+def test_recent_without_last_session_uses_returning_copy(page: Page) -> None:
+    seed = json.loads(SEED_PATH.read_text())
+    recent = [{"name": "Nimbus", "when": 123}]
+    page.evaluate(
+        """([project, recents, lsKey, lastKey, recentsKey]) => {
+            localStorage.setItem(lsKey, JSON.stringify(project))
+            localStorage.removeItem(lastKey)
+            localStorage.setItem(recentsKey, JSON.stringify(recents))
+        }""",
+        [seed, recent, LS_KEY, LAST_SESSION_KEY, RECENTS_KEY],
+    )
+    page.reload(wait_until="networkidle")
+
+    h1 = page.locator("h1").first.inner_text()
+    body = page.locator("p").first.inner_text()
+    assert "Welcome back" in h1, h1
+    assert "recent projects" in body, body
+    assert page.locator("text=RECENT").first.is_visible()
+    log("recent-only Welcome state uses returning-user copy instead of empty-state copy")
+
+
+TESTS_RECENTS_COPY = [
+    test_recent_without_last_session_uses_returning_copy,
+]
+
+
 # --- Suite #2: verify persistence round-trip after boot -------------------
 
 
@@ -147,8 +173,10 @@ TESTS_SEEDED = [
 
 if __name__ == "__main__":
     # Run the two suites back-to-back — first empty-LS, then seeded.
-    # rc1 covers Welcome; rc2 covers default-slot recents; rc3 covers save pipeline.
+    # rc1 covers Welcome; rc2 covers default-slot recents; rc3 covers recent-only copy;
+    # rc4 covers save pipeline.
     rc1 = run_suite(__file__, TESTS_EMPTY, no_seed=True, skip_bootstrap=True)
     rc2 = run_suite(__file__, TESTS_RECENTS, no_seed=True, skip_bootstrap=True)
-    rc3 = run_suite(__file__, TESTS_SEEDED)
-    sys.exit(rc1 or rc2 or rc3)
+    rc3 = run_suite(__file__, TESTS_RECENTS_COPY, no_seed=True, skip_bootstrap=True)
+    rc4 = run_suite(__file__, TESTS_SEEDED)
+    sys.exit(rc1 or rc2 or rc3 or rc4)
