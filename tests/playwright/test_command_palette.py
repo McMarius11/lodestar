@@ -256,6 +256,25 @@ def test_set_today_marker_via_prompt(page: Page) -> None:
     log(f"'Set Today Marker' prompt: {before['meta'].get('today')} → 7 → undone")
 
 
+def test_clear_today_marker_via_blank_prompt(page: Page) -> None:
+    before = get_project(page)
+    assert before["meta"].get("today") is not None, "seed should start with today marker"
+    open_palette(page)
+    page.get_by_test_id("command-palette-input").fill("Today Marker")
+    page.wait_for_timeout(80)
+    opt = page.locator(
+        '[data-testid="dialog-command-palette"] [data-testid="command-proj:today"]'
+    )
+    with DialogHandler(page, accept_with=""):
+        opt.click()
+    wait_idle(page)
+    after = get_project(page)
+    assert after["meta"].get("today") is None, f"today not cleared: {after['meta'].get('today')}"
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    log("blank Today Marker prompt clears meta.today and undo restores it")
+
+
 def test_export_markdown_command_exists(page: Page) -> None:
     open_palette(page)
     page.get_by_test_id("command-palette-input").fill("Export as Markdown")
@@ -266,6 +285,31 @@ def test_export_markdown_command_exists(page: Page) -> None:
     assert opt.count() == 1, "Export as Markdown command missing"
     close_palette(page)
     log("Export as Markdown command is present (not triggered — download)")
+
+
+def test_close_current_project_resets_session_ui_state(page: Page) -> None:
+    page.get_by_test_id("tab-kanban").click()
+    page.wait_for_selector('[data-testid="view-kanban"]')
+    page.get_by_test_id("filter-status-blocked").click()
+
+    open_palette(page)
+    page.get_by_test_id("command-palette-input").fill("Close current project")
+    page.wait_for_timeout(80)
+    opt = page.locator(
+        '[data-testid="dialog-command-palette"] [data-testid="command-proj:close"]'
+    )
+    with DialogHandler(page):
+        opt.click()
+
+    page.wait_for_selector("h1")
+    h1 = page.locator("h1").first.inner_text()
+    assert "Welcome" in h1 or "Nothing yet" in h1, h1
+
+    page.locator("button", has_text="Try the Nimbus example").first.click()
+    page.wait_for_selector('[data-testid="view-scope"]')
+    assert page.locator('[data-testid="view-kanban"]').count() == 0
+    assert page.get_by_test_id("filter-status-all").get_attribute("aria-pressed") == "true"
+    log("Close current project resets view + filters before reopening")
 
 
 def test_empty_query_shows_no_match_placeholder(page: Page) -> None:
@@ -294,7 +338,9 @@ TESTS = [
     test_rename_project_via_prompt,
     test_set_version_via_prompt,
     test_set_today_marker_via_prompt,
+    test_clear_today_marker_via_blank_prompt,
     test_export_markdown_command_exists,
+    test_close_current_project_resets_session_ui_state,
     test_empty_query_shows_no_match_placeholder,
 ]
 
