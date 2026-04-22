@@ -2,11 +2,19 @@
 
 This file tracks the next product and QA work after the current UX stabilization pass.
 
+## Progress
+
+- Desktop screenshot pass completed for Welcome, Scope, Roadmap, Kanban, MindMap, Gantt, Validation, Command Palette, and Task Drawer.
+- Narrow/mobile screenshot pass completed for Scope, Roadmap, and Kanban.
+- Fixed narrow-layout regressions in `TopBar`, `ModuleScope`, `Footer`, and `Kanban`.
+- Added a regression test that keeps view tabs clickable on a narrow viewport.
+
 ## Immediate QA
 
 - Run a manual visual pass on the packaged AppImage.
 - Check Welcome screen, Command Palette, Task Drawer, and close/reopen flows by hand.
 - Verify content correctness in all six views with the real sample data, not only automated checks.
+- Do one more narrow/mobile pass on MindMap, Gantt, and Validation after the responsive fixes.
 - Look for clipped text, awkward spacing, hover/focus states, and confusing empty states.
 
 ## UX Follow-Up

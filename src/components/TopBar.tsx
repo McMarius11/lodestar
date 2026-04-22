@@ -124,10 +124,10 @@ export function TopBar() {
   return (
     <header className="relative z-20 border-b border-line/60 bg-void/80 backdrop-blur-sm">
       {/* Row 1 — identity, navigation, primary actions */}
-      <div className="flex items-stretch">
+      <div className="flex flex-col md:flex-row md:items-stretch">
         {/* Brand */}
         <div
-          className="flex items-stretch border-r border-line/60 min-w-[260px] shrink-0"
+          className="flex items-stretch border-b border-line/40 md:border-b-0 md:border-r md:border-line/60 md:min-w-[260px] shrink-0"
           onContextMenu={(e) => {
             e.preventDefault()
             projectCtx.openAt(e.clientX, e.clientY, [
@@ -165,14 +165,14 @@ export function TopBar() {
           >
             <BrandMark />
 
-            <div className="flex flex-col leading-none">
-              <span className="ser-display text-xl italic text-fg">
+            <div className="flex min-w-0 flex-col leading-none">
+              <span className="ser-display text-xl italic text-fg truncate">
                 {project.meta.name || 'Untitled'}
               </span>
-              <span className="label-mono mt-1 flex items-center gap-2">
+              <span className="label-mono mt-1 flex items-center gap-2 min-w-0">
                 <span className="num-mono">v{project.meta.version}</span>
                 <span className="w-1 h-1 rounded-full bg-fg-subtle" />
-                <span>{source ?? '—'}</span>
+                <span className="truncate">{source ?? '—'}</span>
               </span>
             </div>
           </button>
@@ -186,108 +186,110 @@ export function TopBar() {
           </button>
         </div>
 
-        {/* Tabs */}
-        <nav
-          className="flex items-stretch flex-1 min-w-0 overflow-x-auto scroll-thin"
-          role="tablist"
-          aria-label="Views"
-        >
-          {tabs.map((t) => {
-            const isActive = t.id === active
-            const isValidateTab = t.id === 'validate'
-            const badge = isValidateTab ? errCount + warnCount : 0
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActive(t.id)}
-                title={`${t.label} (${t.tag})`}
-                role="tab"
-                aria-selected={isActive}
-                aria-label={t.label}
-                aria-controls={`view-${t.id}`}
-                data-testid={`tab-${t.id}`}
-                className={clsx(
-                  'group relative px-4 py-2.5 border-r border-line/60 transition-colors shrink-0',
-                  isActive ? 'bg-raised/60' : 'hover:bg-raised/30',
-                )}
-              >
-                <div className="flex items-baseline gap-2">
-                  <span
-                    className={clsx(
-                      'text-sm transition-colors',
-                      isActive ? 'text-fg' : 'text-fg-muted group-hover:text-fg',
-                    )}
-                  >
-                    {t.label}
-                  </span>
-                  <span className="num-mono text-[9px] leading-none text-fg-subtle group-hover:text-fg-muted">
-                    {t.tag}
-                  </span>
-                  {badge > 0 && (
+        <div className="w-full min-w-0 md:flex md:min-w-0">
+          {/* Tabs */}
+          <nav
+            className="flex items-stretch min-w-0 overflow-x-auto scroll-thin border-b border-line/40 md:flex-1 md:border-b-0"
+            role="tablist"
+            aria-label="Views"
+          >
+            {tabs.map((t) => {
+              const isActive = t.id === active
+              const isValidateTab = t.id === 'validate'
+              const badge = isValidateTab ? errCount + warnCount : 0
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setActive(t.id)}
+                  title={`${t.label} (${t.tag})`}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-label={t.label}
+                  aria-controls={`view-${t.id}`}
+                  data-testid={`tab-${t.id}`}
+                  className={clsx(
+                    'group relative px-4 py-2.5 border-r border-line/60 transition-colors shrink-0',
+                    isActive ? 'bg-raised/60' : 'hover:bg-raised/30',
+                  )}
+                >
+                  <div className="flex items-baseline gap-2">
                     <span
                       className={clsx(
-                        'num-mono text-[10px] px-1 ml-1 border',
-                        errCount > 0
-                          ? 'border-danger text-danger'
-                          : 'border-warn text-warn',
+                        'text-sm transition-colors',
+                        isActive ? 'text-fg' : 'text-fg-muted group-hover:text-fg',
                       )}
                     >
-                      {badge}
+                      {t.label}
                     </span>
+                    <span className="num-mono text-[9px] leading-none text-fg-subtle group-hover:text-fg-muted">
+                      {t.tag}
+                    </span>
+                    {badge > 0 && (
+                      <span
+                        className={clsx(
+                          'num-mono text-[10px] px-1 ml-1 border',
+                          errCount > 0
+                            ? 'border-danger text-danger'
+                            : 'border-warn text-warn',
+                        )}
+                      >
+                        {badge}
+                      </span>
+                    )}
+                  </div>
+                  {isActive && (
+                    <span className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent" />
                   )}
-                </div>
-                {isActive && (
-                  <span className="absolute left-0 right-0 bottom-0 h-[2px] bg-accent" />
-                )}
-              </button>
-            )
-          })}
-        </nav>
+                </button>
+              )
+            })}
+          </nav>
 
-        {/* Right cluster — primary actions only; filters live on row 2 */}
-        <div className="flex items-center gap-2 px-3 border-l border-line/60 shrink-0">
-          <div className="flex items-center gap-1 pr-1 border-r border-line/60">
-            <IconBtn
-              onClick={() => undo()}
-              disabled={!canUndo}
-              title={`Undo (⌘Z) · ${historyDepth} steps`}
-              aria-label="Undo"
-              data-testid="btn-undo"
-            >
-              ↶
-            </IconBtn>
-            <IconBtn
-              onClick={() => redo()}
-              disabled={!canRedo}
-              title={`Redo (⌘⇧Z) · ${futureDepth} steps`}
-              aria-label="Redo"
-              data-testid="btn-redo"
-            >
-              ↷
-            </IconBtn>
+          {/* Right cluster — primary actions only; filters live on row 2 */}
+          <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-line/40 shrink-0 md:border-t-0 md:border-l md:border-line/60 md:py-0">
+            <div className="flex items-center gap-1 pr-1 border-r border-line/60">
+              <IconBtn
+                onClick={() => undo()}
+                disabled={!canUndo}
+                title={`Undo (⌘Z) · ${historyDepth} steps`}
+                aria-label="Undo"
+                data-testid="btn-undo"
+              >
+                ↶
+              </IconBtn>
+              <IconBtn
+                onClick={() => redo()}
+                disabled={!canRedo}
+                title={`Redo (⌘⇧Z) · ${futureDepth} steps`}
+                aria-label="Redo"
+                data-testid="btn-redo"
+              >
+                ↷
+              </IconBtn>
+              <button
+                onClick={openNewMenu}
+                title="Create…"
+                aria-label="Create"
+                data-testid="btn-create"
+                className={clsx(
+                  'px-2 py-1 border border-line/40 text-sm transition-colors',
+                  'hover:bg-raised hover:border-line-strong/80',
+                )}
+              >
+                ＋
+              </button>
+            </div>
+            <SaveIndicator status={saveStatus} savedAt={savedAt} />
             <button
-              onClick={openNewMenu}
-              title="Create…"
-              aria-label="Create"
-              data-testid="btn-create"
-              className={clsx(
-                'px-2 py-1 border border-line/40 text-sm transition-colors',
-                'hover:bg-raised hover:border-line-strong/80',
-              )}
+              onClick={() => togglePalette(true)}
+              className="btn-ghost label-mono"
+              title="Command Palette (⌘K)"
+              aria-label="Command Palette"
+              data-testid="btn-command-palette"
             >
-              ＋
+              <span className="num-mono">⌘K</span>
             </button>
           </div>
-          <SaveIndicator status={saveStatus} savedAt={savedAt} />
-          <button
-            onClick={() => togglePalette(true)}
-            className="btn-ghost label-mono"
-            title="Command Palette (⌘K)"
-            aria-label="Command Palette"
-            data-testid="btn-command-palette"
-          >
-            <span className="num-mono">⌘K</span>
-          </button>
         </div>
       </div>
 

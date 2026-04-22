@@ -87,12 +87,12 @@ export function ModuleScope() {
         }}
         className="px-8 pt-8 pb-6 border-b border-line/40"
       >
-        <div className="flex items-end justify-between gap-6">
-          <div>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
             <div className="label-mono mb-3">
               <span className="num-mono">01</span> · MODULE SCOPE
             </div>
-            <h1 className="ser-display text-6xl italic leading-none">
+            <h1 className="ser-display text-5xl md:text-6xl italic leading-none break-words">
               {project.meta.name}
             </h1>
             <p className="mt-3 text-fg-muted max-w-2xl">
@@ -168,7 +168,7 @@ function Totals({ project }: { project: ReturnType<typeof useProjectStore.getSta
   const pct = allTasks.length === 0 ? 0 : done / allTasks.length
 
   return (
-    <div className="grid grid-cols-4 gap-0 border border-line/60 min-w-[420px]">
+    <div className="grid w-full grid-cols-2 sm:grid-cols-4 gap-0 border border-line/60 lg:w-auto">
       <Stat label="Modules" value={project.modules.length} />
       <Stat label="Features" value={allFeatures.length} />
       <Stat label="Tasks" value={allTasks.length} />
@@ -191,7 +191,7 @@ function Stat({
   sub?: string
 }) {
   return (
-    <div className="px-4 py-3 border-r last:border-r-0 border-line/60">
+    <div className="px-4 py-3 border-r even:border-r-0 sm:even:border-r last:border-r-0 border-line/60">
       <div className="label-mono">{label}</div>
       <div className="num-mono text-2xl mt-1">{value}</div>
       {sub && <div className="label-mono text-fg-subtle mt-0.5 num-mono">{sub}</div>}

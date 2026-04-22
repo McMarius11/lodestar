@@ -130,15 +130,15 @@ export function Kanban() {
       aria-label="Kanban"
       data-testid="view-kanban"
     >
-      <div className="px-8 pt-8 pb-4 border-b border-line/40 flex items-end justify-between gap-6">
+      <div className="px-8 pt-8 pb-4 border-b border-line/40 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="label-mono mb-3">
             <span className="num-mono">03</span> · KANBAN
           </div>
-          <h1 className="ser-display text-6xl italic leading-none">flow</h1>
+          <h1 className="ser-display text-5xl md:text-6xl italic leading-none">flow</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="label-mono">SORT</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="label-mono shrink-0">SORT</span>
           {(['module', 'effort', 'milestone'] as const).map((s) => (
             <button
               key={s}
@@ -154,7 +154,8 @@ export function Kanban() {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-3 min-h-0">
+      <div className="flex-1 min-h-0 overflow-x-auto scroll-thin">
+        <div className="flex h-full min-w-max md:min-w-0 md:grid md:grid-cols-3">
         {columns.map((col, i) => {
           const list = buckets[col.id]
           const isHot = hotCol === col.id && dragId !== null
@@ -189,7 +190,7 @@ export function Kanban() {
                 )
               }}
               className={clsx(
-                'flex flex-col min-w-0 transition-colors',
+                'flex flex-col w-[320px] md:w-auto min-w-0 transition-colors',
                 i > 0 && 'border-l border-line/60',
                 isHot && 'bg-accent/5',
               )}
@@ -289,6 +290,7 @@ export function Kanban() {
             </div>
           )
         })}
+        </div>
       </div>
       {ctx.menu}
     </div>
