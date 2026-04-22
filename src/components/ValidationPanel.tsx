@@ -27,8 +27,8 @@ export function ValidationPanel() {
         </div>
         <p className="text-fg-muted max-w-2xl text-sm">
           {issues.length === 0
-            ? 'Alles sauber. Keine Konflikte, Zyklen oder inkonsistenten Daten gefunden.'
-            : `${issues.length} ${issues.length === 1 ? 'Fund' : 'Funde'} in deinem Projekt. Klick auf ein Feature öffnet den Drawer.`}
+            ? 'All clear. No conflicts, cycles, or inconsistent data found.'
+            : `${issues.length} ${issues.length === 1 ? 'finding' : 'findings'} in your project. Click a feature to open the drawer.`}
         </p>
       </div>
 

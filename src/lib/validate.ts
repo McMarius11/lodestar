@@ -31,7 +31,7 @@ export function validate(project: Project): Issue[] {
             kind: 'unknown-dep',
             featureId: f.id,
             moduleId: m.id,
-            message: `${f.label} → unbekannte Dep "${d.id}"`,
+            message: `${f.label} → unknown dependency "${d.id}"`,
           })
           continue
         }
@@ -43,7 +43,7 @@ export function validate(project: Project): Issue[] {
             kind: 'dep-conflict',
             featureId: f.id,
             moduleId: m.id,
-            message: `${f.label} (${f.ms}) braucht ${target.label} (${target.ms})`,
+            message: `${f.label} (${f.ms}) needs ${target.label} (${target.ms})`,
             detail: d.reason,
           })
         }
@@ -54,7 +54,7 @@ export function validate(project: Project): Issue[] {
           kind: 'gantt-invalid',
           featureId: f.id,
           moduleId: m.id,
-          message: `${f.label} — Gantt-Ende ≤ Start (W${f.ganttStart}–W${f.ganttEnd})`,
+          message: `${f.label} — Gantt end ≤ start (W${f.ganttStart}–W${f.ganttEnd})`,
         })
       }
       const span = f.ganttEnd - f.ganttStart
@@ -65,7 +65,7 @@ export function validate(project: Project): Issue[] {
           kind: 'gantt-effort-mismatch',
           featureId: f.id,
           moduleId: m.id,
-          message: `${f.label} — Effort ${f.effort} ≈ ${expected}w, Gantt ${span}w`,
+          message: `${f.label} — effort ${f.effort} ≈ ${expected}w, Gantt ${span}w`,
         })
       }
       if (!msIds.has(f.ms)) {
@@ -74,7 +74,7 @@ export function validate(project: Project): Issue[] {
           kind: 'orphan-milestone',
           featureId: f.id,
           moduleId: m.id,
-          message: `${f.label} — Milestone "${f.ms}" existiert nicht`,
+          message: `${f.label} — milestone "${f.ms}" does not exist`,
         })
       }
     }
@@ -86,7 +86,7 @@ export function validate(project: Project): Issue[] {
     issues.push({
       severity: 'error',
       kind: 'dep-cycle',
-      message: `Dep-Zyklus: ${labels.join(' → ')}`,
+      message: `Dependency cycle: ${labels.join(' → ')}`,
     })
   }
 

@@ -292,7 +292,7 @@ export function MindMap() {
         <div className="label-mono mb-3">
           <span className="num-mono">04</span> · MIND MAP
         </div>
-        <h1 className="ser-display text-6xl italic leading-none">constellation</h1>
+        <h1 className="ser-display text-5xl md:text-6xl italic leading-none">constellation</h1>
       </div>
 
       <div
@@ -580,14 +580,16 @@ export function MindMap() {
         </svg>
 
         {showHint && (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 label-mono bg-base/95 border border-accent/60 px-4 py-2.5 backdrop-blur animate-pulse pointer-events-none">
+          <div className="absolute bottom-28 left-4 right-4 sm:bottom-20 sm:left-1/2 sm:right-auto sm:w-max sm:max-w-[calc(100%-3rem)] sm:-translate-x-1/2 label-mono bg-base/95 border border-accent/60 px-4 py-2.5 backdrop-blur animate-pulse pointer-events-none">
             <span className="text-accent">▸</span>
-            <span className="ml-2 text-fg">Wheel zoom · Drag pan · Drag nodes · Shift+drag to connect · Right-click for menu</span>
+            <span className="ml-2 text-fg leading-relaxed">
+              Wheel zoom · Drag pan · Drag nodes · Shift+drag to connect · Right-click for menu
+            </span>
           </div>
         )}
 
         {/* legend */}
-        <div className="absolute bottom-6 left-6 flex items-center gap-5 label-mono bg-base/80 border border-line/60 px-4 py-2.5 backdrop-blur">
+        <div className="absolute bottom-4 left-4 right-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 label-mono bg-base/80 border border-line/60 px-4 py-2.5 backdrop-blur sm:bottom-6 sm:left-6 sm:right-auto sm:justify-start">
           <LegendDot color="bg-success" label="done" />
           <LegendDot color="bg-accent" label="progress" />
           <LegendDot color="bg-void border border-line-strong" label="backlog" />
@@ -596,7 +598,7 @@ export function MindMap() {
         </div>
 
         {/* zoom controls */}
-        <div className="absolute bottom-6 right-6 flex items-center gap-2 label-mono bg-base/80 border border-line/60 px-3 py-2 backdrop-blur">
+        <div className="absolute bottom-[4.75rem] left-4 right-4 flex flex-wrap items-center justify-center gap-2 label-mono bg-base/80 border border-line/60 px-3 py-2 backdrop-blur sm:bottom-6 sm:left-auto sm:right-6 sm:justify-start">
           <span className="num-mono text-fg-subtle">
             {Math.round(scale * 100)}%
           </span>

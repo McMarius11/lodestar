@@ -116,18 +116,18 @@ export function Gantt() {
       data-gantt-zoom={WEEK_W}
       data-gantt-week-w={WEEK_W}
     >
-      <div className="px-8 pt-8 pb-4 border-b border-line/40 flex items-end justify-between gap-6">
+      <div className="px-8 pt-8 pb-4 border-b border-line/40 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="label-mono mb-3">
             <span className="num-mono">05</span> · GANTT
           </div>
-          <h1 className="ser-display text-6xl italic leading-none">critical path</h1>
+          <h1 className="ser-display text-5xl md:text-6xl italic leading-none">critical path</h1>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="label-mono text-fg-muted">
+        <div className="flex flex-wrap items-center gap-3 md:justify-end">
+          <div className="label-mono text-fg-muted flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="num-mono text-fg">W{weeks.toString().padStart(2, '0')}</span> SPAN
             {today !== undefined && (
-              <span className="ml-4">
+              <span>
                 TODAY <span className="num-mono text-accent">W{String(today).padStart(2, '0')}</span>
               </span>
             )}
