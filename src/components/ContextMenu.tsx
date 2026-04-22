@@ -81,7 +81,13 @@ function ContextMenuPortal({
   useEffect(() => {
     const onDocDown = (e: MouseEvent) => {
       if (!ref.current) return
-      if (ref.current.contains(e.target as Node)) return
+      const target = e.target as Element | null
+      if (!target) return
+      // Submenus are portaled to document.body so they're NOT inside ref.current.
+      // Include them explicitly, otherwise clicking a submenu item closes the
+      // main menu on mousedown before the click event reaches the item.
+      if (target.closest('[data-testid="context-menu"], [data-testid="context-submenu"]'))
+        return
       onClose()
     }
     const onKey = (e: KeyboardEvent) => {

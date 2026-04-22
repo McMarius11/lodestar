@@ -59,7 +59,10 @@ export function ModuleEditor({
   }
 
   const left = Math.max(12, Math.min(window.innerWidth - 320, anchor.left))
-  const top = anchor.bottom + 6
+  const estHeight = 320
+  const top = anchor.bottom + 6 + estHeight <= window.innerHeight
+    ? anchor.bottom + 6
+    : Math.max(12, anchor.top - 6 - estHeight)
 
   return (
     <AnimatePresence>
