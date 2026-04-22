@@ -12,8 +12,14 @@ release
 *.tsbuildinfo
 .tsbuild/
 
-# local project data — use data/project.example.json as starting point
-data/project.json
+# local project data — only the example seed is tracked
+data/*.json
+!data/project.example.json
+*.bak
 
 # Claude Code local state
 .claude/
+
+# Python bytecode (playwright test harness)
+__pycache__/
+*.pyc

@@ -1,0 +1,106 @@
+"""Welcome screen + persistence round-trip. Runs with no seed so the app
+renders the onboarding state."""
+from __future__ import annotations
+
+import json
+import sys
+
+from playwright.sync_api import Page
+
+from _lib import (
+    LS_KEY,
+    LAST_SESSION_KEY,
+    close_drawer,
+    get_project,
+    log,
+    run_suite,
+    wait_idle,
+)
+
+
+def test_welcome_appears_with_empty_storage(page: Page) -> None:
+    # Both markers cleared by the no-seed runner already; verify.
+    stored = page.evaluate(f"() => localStorage.getItem({json.dumps(LS_KEY)})")
+    last = page.evaluate(f"() => localStorage.getItem({json.dumps(LAST_SESSION_KEY)})")
+    assert stored is None, stored
+    assert last is None, last
+    # Welcome screen mounts — "Nothing yet." headline + Nimbus button.
+    page.wait_for_selector("h1", timeout=5000)
+    h1 = page.locator("h1").first.inner_text()
+    assert "Nothing yet" in h1, h1
+    assert page.locator("button", has_text="Try the Nimbus example").count() == 1
+    log("empty LS → Welcome screen with 'Nothing yet.' headline")
+
+
+def test_try_nimbus_loads_sample(page: Page) -> None:
+    page.locator("button", has_text="Try the Nimbus example").first.click()
+    page.wait_for_selector('[role="tablist"]', timeout=10_000)
+    page.wait_for_selector('[data-testid="view-scope"]')
+    h1 = page.locator("h1").first.inner_text()
+    assert h1 == "Nimbus", h1
+    log("Try-Nimbus button loads the 6-module sample")
+
+
+TESTS_EMPTY = [
+    test_welcome_appears_with_empty_storage,
+    test_try_nimbus_loads_sample,
+]
+
+
+# --- Suite #2: verify persistence round-trip after boot -------------------
+
+
+def test_edit_triggers_save_cycle(page: Page) -> None:
+    """After a mutation the indicator flashes 'saving' → 'saved'."""
+    page.get_by_test_id("tab-scope").click()
+    page.wait_for_selector('[data-testid="view-scope"]')
+    # Trigger any mutation that goes through commit() — status filter is UI only
+    # so it won't work. Use the "+ NEW" menu to add a feature.
+    page.get_by_test_id("btn-create").click()
+    page.wait_for_selector('[data-testid="context-menu"]', timeout=2000)
+    # pick "New Feature in …" or similar; fall back to first available item
+    item = page.locator('[data-testid^="menuitem-new-feature"]').first
+    if item.count() == 0:
+        item = page.locator('[data-testid="context-menu"] button').first
+    item.click()
+    # Now a feature exists; the save indicator should transition.
+    wait_idle(page, timeout_ms=5000)
+    status = page.get_by_test_id("save-indicator").get_attribute("data-save-status")
+    assert status in {"saved", "idle"}, status
+    # Add-feature opens the drawer — close it before using toolbar buttons.
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    log(f"save indicator reached '{status}' after mutation")
+
+
+def test_mutation_persists_to_localstorage(page: Page) -> None:
+    """After a mutation, localStorage reflects the new project JSON."""
+    before_raw = page.evaluate(f"() => localStorage.getItem({json.dumps(LS_KEY)})")
+    before = json.loads(before_raw) if before_raw else {"modules": []}
+    before_count = sum(len(m["features"]) for m in before.get("modules", []))
+    page.get_by_test_id("btn-create").click()
+    page.wait_for_selector('[data-testid="context-menu"]')
+    page.locator('[data-testid^="menuitem-new-feature"]').first.click()
+    wait_idle(page)
+    after = get_project(page)
+    after_count = sum(len(m["features"]) for m in after["modules"])
+    assert after_count == before_count + 1, (before_count, after_count)
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    log(f"feature count {before_count} → {after_count} landed in localStorage")
+
+
+TESTS_SEEDED = [
+    test_edit_triggers_save_cycle,
+    test_mutation_persists_to_localstorage,
+]
+
+
+if __name__ == "__main__":
+    # Run the two suites back-to-back — first empty-LS, then seeded.
+    # rc1 covers Welcome; rc2 covers the save pipeline.
+    rc1 = run_suite(__file__, TESTS_EMPTY, no_seed=True, skip_bootstrap=True)
+    rc2 = run_suite(__file__, TESTS_SEEDED)
+    sys.exit(rc1 or rc2)
