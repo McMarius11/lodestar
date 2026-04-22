@@ -384,7 +384,7 @@ function SaveIndicator({
   status,
   savedAt,
 }: {
-  status: 'idle' | 'saving' | 'saved' | 'error'
+  status: 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
   savedAt: number | null
 }) {
   const [now, setNow] = useState(() => Date.now())
@@ -397,6 +397,8 @@ function SaveIndicator({
   const tooltip =
     status === 'saving'
       ? 'Saving…'
+      : status === 'conflict'
+      ? 'External change waiting — choose Reload from disk or Keep mine'
       : status === 'error'
       ? 'Save failed — check console'
       : savedAt
@@ -419,6 +421,8 @@ function SaveIndicator({
           'w-1.5 h-1.5 rounded-full transition-colors',
           status === 'saving'
             ? 'bg-accent animate-accent-pulse'
+            : status === 'conflict'
+            ? 'bg-warn'
             : status === 'error'
             ? 'bg-danger'
             : isSuccess

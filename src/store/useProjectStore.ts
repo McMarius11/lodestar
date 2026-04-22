@@ -29,7 +29,7 @@ import {
   type LastSession,
 } from '@/lib/lastSession'
 
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
 export type StatusFilter = 'all' | 'ready' | 'blocked' | 'conflict'
 
@@ -147,6 +147,12 @@ type Actions = {
 const HISTORY_LIMIT = 50
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
+function clearPendingSaveTimer(): void {
+  if (!saveTimer) return
+  clearTimeout(saveTimer)
+  saveTimer = null
+}
+
 function basenameOf(p: string): string {
   const parts = p.split(/[/\\]/)
   return parts[parts.length - 1] || p
@@ -238,8 +244,16 @@ export const useProjectStore = create<State & Actions>()(
         const st = get()
         const userEditing =
           st.drawerFeatureId !== null || st.paletteOpen || isInputFocused()
-        if (userEditing) {
-          set((s) => void (s.externalChangePending = true))
+        const hasUnsavedLocalChanges =
+          st.saveStatus === 'saving' ||
+          st.saveStatus === 'error' ||
+          st.externalChangePending
+        if (userEditing || hasUnsavedLocalChanges) {
+          clearPendingSaveTimer()
+          set((s) => {
+            s.externalChangePending = true
+            s.saveStatus = 'conflict'
+          })
           return
         }
         await get().reloadFromDisk()
@@ -257,6 +271,7 @@ export const useProjectStore = create<State & Actions>()(
     openDefaultProject: async () => {
       const loaded = await loadProject()
       if (loaded.status !== 'ok') return false
+      clearPendingSaveTimer()
       set((s) => {
         s.project = loaded.project
         s.source = loaded.source
@@ -280,6 +295,7 @@ export const useProjectStore = create<State & Actions>()(
         return false
       }
       const resolvedPath = loaded.path ?? path
+      clearPendingSaveTimer()
       set((s) => {
         s.project = loaded.project
         s.source = 'disk'
@@ -296,6 +312,7 @@ export const useProjectStore = create<State & Actions>()(
       const res = await importProject()
       if (!res) return false
       const path = res.path
+      clearPendingSaveTimer()
       set((s) => {
         s.project = res.project
         s.source = 'disk'
@@ -312,6 +329,7 @@ export const useProjectStore = create<State & Actions>()(
       const p = importProjectFromText(text)
       if (!p) return false
       const path = opts?.path
+      clearPendingSaveTimer()
       set((s) => {
         s.project = p
         s.source = 'disk'
@@ -329,6 +347,7 @@ export const useProjectStore = create<State & Actions>()(
         ? await loadProjectFromPath(currentPath)
         : await loadProject()
       if (loaded.status !== 'ok') return
+      clearPendingSaveTimer()
       set((s) => {
         s.project = loaded.project
         s.source = loaded.source
@@ -339,12 +358,14 @@ export const useProjectStore = create<State & Actions>()(
     },
 
     dismissExternalChange: () => {
+      clearPendingSaveTimer()
       set((s) => void (s.externalChangePending = false))
       get()._persist()
     },
 
     loadSample: () => {
       const p = migrate(sampleProject)
+      clearPendingSaveTimer()
       set((s) => {
         s.project = p
         s.source = 'disk'
@@ -358,6 +379,7 @@ export const useProjectStore = create<State & Actions>()(
 
     loadLodestarRoadmap: () => {
       const p = migrate(lodestarRoadmap)
+      clearPendingSaveTimer()
       set((s) => {
         s.project = p
         s.source = 'disk'
@@ -380,6 +402,7 @@ export const useProjectStore = create<State & Actions>()(
         },
         modules: [],
       }
+      clearPendingSaveTimer()
       set((s) => {
         s.project = empty
         s.source = 'disk'
@@ -392,6 +415,7 @@ export const useProjectStore = create<State & Actions>()(
     },
 
     closeCurrentProject: () => {
+      clearPendingSaveTimer()
       set((s) => {
         s.project = {
           meta: {
@@ -927,11 +951,21 @@ export const useProjectStore = create<State & Actions>()(
 
     _persist: () => {
       if (get().source === 'none') return
+      clearPendingSaveTimer()
+      if (get().externalChangePending) {
+        set((s) => void (s.saveStatus = 'conflict'))
+        return
+      }
       set((s) => void (s.saveStatus = 'saving'))
-      if (saveTimer) clearTimeout(saveTimer)
       saveTimer = setTimeout(async () => {
+        saveTimer = null
         try {
-          const { project, currentPath } = get()
+          const { project, currentPath, source, externalChangePending } = get()
+          if (source === 'none') return
+          if (externalChangePending) {
+            set((s) => void (s.saveStatus = 'conflict'))
+            return
+          }
           await saveProject(project, currentPath ?? undefined)
           set((s) => {
             s.saveStatus = 'saved'

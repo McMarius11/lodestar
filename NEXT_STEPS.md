@@ -13,12 +13,13 @@ This file tracks the next product and QA work after the current UX stabilization
 - Normalized Validation copy to English to match the rest of the UI.
 - Fixed Welcome-screen recents for the default slot: deduped pathless entries, made them reopenable, and kept them removable.
 - Fixed Welcome-screen copy for the recent-only state after closing the current project.
+- Hardened external-change handling so disk rewrites no longer clobber unsaved local edits during the save debounce window.
+- Verified both external-change conflict decisions on the desktop build: `Keep mine` and `Reload from disk`.
 - Added a regression test that keeps view tabs clickable on a narrow viewport.
 
 ## Immediate QA
 
 - Spot-check the final AppImage artifact once more before tagging a patch release.
-- Run a longer-session save-state / external-change pass on the desktop build.
 - Look for clipped text, awkward spacing, hover/focus states, and confusing empty states.
 
 ## UX Follow-Up
