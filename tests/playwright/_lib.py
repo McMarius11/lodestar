@@ -208,17 +208,9 @@ def close_palette(page: Page) -> None:
 
 
 def close_drawer(page: Page) -> None:
-    """Close the task drawer. Escape only blurs a focused input/textarea
-    (see TaskDrawer.tsx) — so send a double-tap. The second press lands
-    outside the now-blurred field and closes the drawer for real."""
+    """Close the task drawer via Escape."""
     if not page.locator('[data-testid="dialog-task"]').count():
         return
-    page.keyboard.press("Escape")
-    try:
-        page.wait_for_selector('[data-testid="dialog-task"]', state="detached", timeout=500)
-        return
-    except Exception:
-        pass
     page.keyboard.press("Escape")
     page.wait_for_selector('[data-testid="dialog-task"]', state="detached", timeout=3000)
 

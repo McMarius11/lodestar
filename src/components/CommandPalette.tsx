@@ -13,17 +13,32 @@ type Cmd = {
   group: 'view' | 'feature' | 'task' | 'project' | 'file' | 'edit'
 }
 
+function isTypingIn(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false
+  const tag = el.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  if (el.isContentEditable) return true
+  return false
+}
+
 export function CommandPalette() {
   const open = useProjectStore((s) => s.paletteOpen)
   const toggle = useProjectStore((s) => s.togglePalette)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && open) {
+        e.preventDefault()
+        toggle(false)
+        return
+      }
+
+      if (isTypingIn(e.target)) return
+
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         toggle()
       }
-      if (e.key === 'Escape') toggle(false)
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         useProjectStore.getState().undo()
@@ -38,7 +53,7 @@ export function CommandPalette() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [toggle])
+  }, [open, toggle])
 
   return (
     <AnimatePresence>
@@ -188,7 +203,16 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       group: 'project',
       run: () => {
         const w = prompt('Today (week number)', String(store.project.meta.today ?? 0))
-        if (w !== null) store.updateMeta({ today: Number(w) })
+        if (w === null) return
+        const trimmed = w.trim()
+        if (trimmed === '') {
+          store.updateMeta({ today: undefined })
+          return
+        }
+        const parsed = Number(trimmed)
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          store.updateMeta({ today: Math.round(parsed) })
+        }
       },
     })
     list.push({

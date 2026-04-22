@@ -147,6 +147,41 @@ def test_typing_guard_inside_input(page: Page) -> None:
     log("typing '3' inside palette input does not switch view")
 
 
+def test_ctrl_z_inside_textarea_does_not_trigger_project_undo(page: Page) -> None:
+    goto_view(page, "scope")
+    page.keyboard.press("Escape")
+    feature = page.locator('[data-testid="view-scope"] [data-feature-id]').first
+    feature.click()
+    page.wait_for_selector('[data-testid="dialog-task"]')
+    drawer = page.get_by_test_id("dialog-task")
+    fid = drawer.get_attribute("data-drawer-feature")
+    before = get_project(page)
+    task_before = feature_by_id(before, fid)["tasks"][0]["done"]  # type: ignore[index]
+
+    drawer.locator("ul li button").first.click()
+    wait_idle(page)
+    after_toggle = get_project(page)
+    task_after_toggle = feature_by_id(after_toggle, fid)["tasks"][0]["done"]  # type: ignore[index]
+    assert task_after_toggle != task_before, "setup failed: task toggle did not commit"
+
+    textarea = drawer.locator("textarea").first
+    textarea.focus()
+    textarea.type("draft")
+    page.keyboard.press("Control+z")
+    page.wait_for_timeout(150)
+
+    after_undo_key = get_project(page)
+    task_after_undo_key = feature_by_id(after_undo_key, fid)["tasks"][0]["done"]  # type: ignore[index]
+    assert task_after_undo_key == task_after_toggle, (
+        "Ctrl+Z inside textarea should not trigger project undo"
+    )
+
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    log("Ctrl+Z inside textarea leaves project history untouched")
+
+
 TESTS = [
     test_view_switch_1_to_6,
     test_question_mark_opens_help,
@@ -157,6 +192,7 @@ TESTS = [
     test_f2_renames_focused_feature,
     test_cmd_d_duplicates_feature,
     test_typing_guard_inside_input,
+    test_ctrl_z_inside_textarea_does_not_trigger_project_undo,
 ]
 
 

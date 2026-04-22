@@ -60,6 +60,14 @@ def test_esc_closes(page: Page) -> None:
     log("Esc closes drawer")
 
 
+def test_esc_closes_while_input_focused(page: Page) -> None:
+    _open_first_feature(page)
+    page.get_by_test_id("drawer-feature-label").focus()
+    page.keyboard.press("Escape")
+    page.wait_for_selector('[data-testid="dialog-task"]', state="detached")
+    log("Esc closes drawer even while an input is focused")
+
+
 def test_outside_click_closes(page: Page) -> None:
     _open_first_feature(page)
     # The overlay div sits under the drawer at opacity:0.5 and covers the viewport.
@@ -237,6 +245,26 @@ def test_weeks_inputs(page: Page) -> None:
     log(f"weeks: {before_start}-{before_end} → {new_start}-{new_end} → undone")
 
 
+def test_weeks_blank_input_does_not_corrupt_state(page: Page) -> None:
+    fid = _open_first_feature(page)
+    before = get_project(page)
+    before_feat = feature_by_id(before, fid)  # type: ignore[assignment]
+    before_start = before_feat["ganttStart"]  # type: ignore[index]
+    before_end = before_feat["ganttEnd"]  # type: ignore[index]
+    weeks_inputs = page.locator(
+        '[data-testid="dialog-task"] label:has-text("WEEKS") input[type="number"]'
+    )
+    weeks_inputs.nth(0).fill("")
+    weeks_inputs.nth(0).blur()
+    wait_idle(page)
+    after = get_project(page)
+    after_feat = feature_by_id(after, fid)  # type: ignore[assignment]
+    assert after_feat["ganttStart"] == before_start  # type: ignore[index]
+    assert after_feat["ganttEnd"] == before_end  # type: ignore[index]
+    close_drawer(page)
+    log("blank week input leaves gantt values unchanged")
+
+
 def test_add_dependency_via_drawer(page: Page) -> None:
     _open_first_feature(page)
     drawer = page.get_by_test_id("dialog-task")
@@ -309,6 +337,7 @@ TESTS = [
     test_open_via_click,
     test_open_via_context_menu,
     test_esc_closes,
+    test_esc_closes_while_input_focused,
     test_outside_click_closes,
     test_label_edit_commits,
     test_task_toggle_commits,
@@ -318,6 +347,7 @@ TESTS = [
     test_effort_dropdown,
     test_milestone_dropdown,
     test_weeks_inputs,
+    test_weeks_blank_input_does_not_corrupt_state,
     test_add_dependency_via_drawer,
     test_delete_feature_from_drawer_footer,
 ]

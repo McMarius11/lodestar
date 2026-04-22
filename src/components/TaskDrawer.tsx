@@ -8,6 +8,12 @@ import { EffortBadge } from './EffortBadge'
 import { ProgressBar } from './ProgressBar'
 import type { Dep, DepType, Effort } from '@/types'
 
+function parseWeekInput(value: string): number | null {
+  if (value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : null
+}
+
 export function TaskDrawer() {
   const id = useProjectStore((s) => s.drawerFeatureId)
   const close = useProjectStore((s) => s.openDrawer)
@@ -16,10 +22,9 @@ export function TaskDrawer() {
     if (!id) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      const el = e.target as HTMLElement | null
+      const el = document.activeElement as HTMLElement | null
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
         el.blur()
-        return
       }
       e.preventDefault()
       close(null)
@@ -347,9 +352,11 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
               type="number"
               min={0}
               value={feat.ganttStart}
-              onChange={(e) =>
-                updateFeature(feat.id, { ganttStart: Number(e.target.value) })
-              }
+              onChange={(e) => {
+                const next = parseWeekInput(e.target.value)
+                if (next === null) return
+                updateFeature(feat.id, { ganttStart: next })
+              }}
               className="num-mono w-12 bg-transparent border border-line/60 px-1.5 py-1 text-center"
             />
             <span className="text-fg-subtle">–</span>
@@ -357,9 +364,11 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
               type="number"
               min={0}
               value={feat.ganttEnd}
-              onChange={(e) =>
-                updateFeature(feat.id, { ganttEnd: Number(e.target.value) })
-              }
+              onChange={(e) => {
+                const next = parseWeekInput(e.target.value)
+                if (next === null) return
+                updateFeature(feat.id, { ganttEnd: next })
+              }}
               className="num-mono w-12 bg-transparent border border-line/60 px-1.5 py-1 text-center"
             />
           </label>
