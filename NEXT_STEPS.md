@@ -17,12 +17,14 @@ This file tracks the next product and QA work after the current UX stabilization
 - Verified both external-change conflict decisions on the desktop build: `Keep mine` and `Reload from disk`.
 - Blocked global view/palette shortcuts while the task drawer or other modal editors are open.
 - Fixed the task drawer layout on narrow screens so sections stack and footer controls stay visible.
+- Fixed task/dependency delete affordances in the task drawer so they stay visible on narrow screens and no longer depend on hover alone.
 - Improved Welcome-screen affordances: the primary open-project action is keyboard reachable, and recent-entry removal stays visible on narrow screens.
+- Final AppImage artifact spot-check completed on the current branch build.
+- AppImage QA pass covered fresh launch, Welcome focus order, sample open, task drawer, palette, close/reopen, and recent-project reopen.
 - Added a regression test that keeps view tabs clickable on a narrow viewport.
 
 ## Immediate QA
 
-- Spot-check the final AppImage artifact once more before tagging a patch release.
 - Look for clipped text, awkward spacing, hover/focus states, and confusing empty states.
 
 ## UX Follow-Up
@@ -39,6 +41,6 @@ This file tracks the next product and QA work after the current UX stabilization
 
 ## Release / PR
 
-- Collect manual QA notes after testing the AppImage.
+- QA notes from the current AppImage spot-check should be kept in sync with the PR.
 - Update version/release notes if shipping a new patch release.
 - Open or refine the GitHub PR with screenshots or short QA notes if useful.

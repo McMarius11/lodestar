@@ -195,8 +195,10 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
                   {t.label}
                 </span>
                 <button
+                  type="button"
                   onClick={() => deleteTask(feat.id, t.id)}
-                  className="label-mono text-fg-subtle opacity-0 group-hover:opacity-100 hover:text-danger"
+                  aria-label={`Delete task ${t.label}`}
+                  className="label-mono text-fg-subtle opacity-70 transition-opacity hover:opacity-100 hover:text-danger"
                 >
                   DEL
                 </button>
@@ -272,8 +274,10 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
                     <option value="optional">OPTIONAL</option>
                   </select>
                   <button
+                    type="button"
                     onClick={() => removeDep(feat.id, d.id)}
-                    className="label-mono text-fg-subtle opacity-0 group-hover:opacity-100 hover:text-danger"
+                    aria-label={`Remove dependency on ${target?.label ?? d.id}`}
+                    className="label-mono text-fg-subtle opacity-70 transition-opacity hover:opacity-100 hover:text-danger"
                   >
                     DEL
                   </button>

@@ -18,6 +18,7 @@ from _lib import (
 
 
 def _goto_scope(page: Page) -> None:
+    close_drawer(page)
     page.get_by_test_id("tab-scope").click()
     page.wait_for_selector('[data-testid="view-scope"]')
 
@@ -29,6 +30,13 @@ def _open_first_feature(page: Page) -> str:
     feat.click()
     page.wait_for_selector('[data-testid="dialog-task"]')
     return fid  # type: ignore[return-value]
+
+
+def _open_feature(page: Page, fid: str) -> str:
+    _goto_scope(page)
+    page.locator(f'[data-testid="view-scope"] [data-feature-id="{fid}"]').first.click()
+    page.wait_for_selector('[data-testid="dialog-task"]')
+    return fid
 
 
 def test_open_via_click(page: Page) -> None:
@@ -368,6 +376,38 @@ def test_mobile_drawer_stacks_sections_and_keeps_footer_controls_visible(page: P
     log(f"mobile drawer layout stays readable for {fid!r}")
 
 
+def test_mobile_delete_actions_stay_visible_for_tasks_and_dependencies(page: Page) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    fid = _open_feature(page, "auth")
+    task_delete = page.locator('[aria-label^="Delete task "]').first
+    dep_delete = page.locator('[aria-label^="Remove dependency on "]').first
+    task_opacity = float(task_delete.evaluate("el => getComputedStyle(el).opacity"))
+    dep_opacity = float(dep_delete.evaluate("el => getComputedStyle(el).opacity"))
+    assert task_opacity >= 0.69, f"task delete action should stay visible on mobile, got {task_opacity}"
+    assert dep_opacity >= 0.69, (
+        f"dependency delete action should stay visible on mobile, got {dep_opacity}"
+    )
+    close_drawer(page)
+    page.set_viewport_size({"width": 1280, "height": 900})
+    log(f"mobile delete affordances stay visible for {fid!r}")
+
+
+def test_task_delete_action_is_keyboard_focusable(page: Page) -> None:
+    _open_feature(page, "auth")
+    delete_btn = page.locator('[aria-label^="Delete task "]').first
+    before = float(delete_btn.evaluate("el => getComputedStyle(el).opacity"))
+    focused = delete_btn.evaluate(
+        """el => {
+            el.focus()
+            return document.activeElement === el
+        }"""
+    )
+    assert before >= 0.69, f"expected visible desktop affordance before focus, got {before}"
+    assert focused is True, "expected delete action to be keyboard focusable"
+    close_drawer(page)
+    log("task delete affordance is keyboard focusable")
+
+
 TESTS = [
     test_open_via_click,
     test_open_via_context_menu,
@@ -386,6 +426,8 @@ TESTS = [
     test_add_dependency_via_drawer,
     test_delete_feature_from_drawer_footer,
     test_mobile_drawer_stacks_sections_and_keeps_footer_controls_visible,
+    test_mobile_delete_actions_stay_visible_for_tasks_and_dependencies,
+    test_task_delete_action_is_keyboard_focusable,
 ]
 
 
