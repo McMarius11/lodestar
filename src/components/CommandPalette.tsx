@@ -192,7 +192,10 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       group: 'project',
       run: () => {
         const name = prompt('Project name', store.project.meta.name)
-        if (name) store.updateMeta({ name })
+        const trimmed = name?.trim()
+        if (trimmed && trimmed !== store.project.meta.name) {
+          store.updateMeta({ name: trimmed })
+        }
       },
     })
     list.push({
@@ -202,7 +205,10 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       group: 'project',
       run: () => {
         const v = prompt('Version', store.project.meta.version)
-        if (v) store.updateMeta({ version: v })
+        const trimmed = v?.trim()
+        if (trimmed && trimmed !== store.project.meta.version) {
+          store.updateMeta({ version: trimmed })
+        }
       },
     })
     list.push({

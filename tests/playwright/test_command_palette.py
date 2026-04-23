@@ -238,6 +238,44 @@ def test_set_version_via_prompt(page: Page) -> None:
     log(f"'Set Version' prompt: {before['meta']['version']!r} → {new_v!r} → undone")
 
 
+def test_whitespace_project_rename_prompt_is_ignored(page: Page) -> None:
+    before = get_project(page)
+    before_name = before["meta"]["name"]
+    open_palette(page)
+    page.get_by_test_id("command-palette-input").fill("Rename Project")
+    page.wait_for_timeout(80)
+    opt = page.locator(
+        '[data-testid="dialog-command-palette"] [data-testid="command-proj:rename"]'
+    )
+    with DialogHandler(page, accept_with="   "):
+        opt.click()
+    wait_idle(page)
+    after = get_project(page)
+    assert after["meta"]["name"] == before_name, (
+        f"whitespace-only project rename should be ignored: {before_name!r} → {after['meta']['name']!r}"
+    )
+    log("whitespace-only Rename Project prompt is ignored")
+
+
+def test_whitespace_version_prompt_is_ignored(page: Page) -> None:
+    before = get_project(page)
+    before_version = before["meta"]["version"]
+    open_palette(page)
+    page.get_by_test_id("command-palette-input").fill("Set Version")
+    page.wait_for_timeout(80)
+    opt = page.locator(
+        '[data-testid="dialog-command-palette"] [data-testid="command-proj:version"]'
+    )
+    with DialogHandler(page, accept_with="   "):
+        opt.click()
+    wait_idle(page)
+    after = get_project(page)
+    assert after["meta"]["version"] == before_version, (
+        f"whitespace-only version prompt should be ignored: {before_version!r} → {after['meta']['version']!r}"
+    )
+    log("whitespace-only Set Version prompt is ignored")
+
+
 def test_set_today_marker_via_prompt(page: Page) -> None:
     before = get_project(page)
     open_palette(page)
@@ -337,6 +375,8 @@ TESTS = [
     test_edit_milestones_opens_editor,
     test_rename_project_via_prompt,
     test_set_version_via_prompt,
+    test_whitespace_project_rename_prompt_is_ignored,
+    test_whitespace_version_prompt_is_ignored,
     test_set_today_marker_via_prompt,
     test_clear_today_marker_via_blank_prompt,
     test_export_markdown_command_exists,
