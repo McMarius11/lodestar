@@ -126,32 +126,32 @@ def test_unknown_dep_row_shown(page: Page) -> None:
     goto_view(page, "validate")
     rows = page.locator('[data-testid="view-validate"] button').all_inner_texts()
     combined = " | ".join(rows)
-    assert "UNKNOWN-DEP" in combined, combined[:200]
-    log("UNKNOWN-DEP row visible")
+    assert "MISSING DEPENDENCY" in combined, combined[:200]
+    log("Missing dependency row visible")
 
 
 def test_gantt_invalid_row_shown(page: Page) -> None:
     goto_view(page, "validate")
     rows = page.locator('[data-testid="view-validate"] button').all_inner_texts()
     combined = " | ".join(rows)
-    assert "GANTT-INVALID" in combined, combined[:200]
-    log("GANTT-INVALID row visible")
+    assert "INVALID GANTT RANGE" in combined, combined[:200]
+    log("Invalid Gantt range row visible")
 
 
 def test_dep_cycle_row_shown(page: Page) -> None:
     goto_view(page, "validate")
     rows = page.locator('[data-testid="view-validate"] button').all_inner_texts()
     combined = " | ".join(rows)
-    assert "DEP-CYCLE" in combined, combined[:200]
-    log("DEP-CYCLE row visible")
+    assert "DEPENDENCY CYCLE" in combined, combined[:200]
+    log("Dependency cycle row visible")
 
 
 def test_orphan_milestone_row_shown(page: Page) -> None:
     goto_view(page, "validate")
     rows = page.locator('[data-testid="view-validate"] button').all_inner_texts()
     combined = " | ".join(rows)
-    assert "ORPHAN-MILESTONE" in combined, combined[:200]
-    log("ORPHAN-MILESTONE row visible")
+    assert "MISSING MILESTONE" in combined, combined[:200]
+    log("Missing milestone row visible")
 
 
 def test_click_issue_opens_drawer(page: Page) -> None:

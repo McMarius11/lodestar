@@ -78,7 +78,7 @@ function IssueRow({ issue, onOpen }: { issue: Issue; onOpen: (id: string) => voi
         {sev === 'error' ? 'ERR' : sev === 'warn' ? 'WARN' : 'INFO'}
       </span>
       <span className="label-mono w-[180px] shrink-0 pt-0.5 text-fg-subtle">
-        {issue.kind.toUpperCase()}
+        {kindLabel(issue.kind)}
       </span>
       <span className="flex-1 min-w-0">
         <span className="text-sm text-fg">{issue.message}</span>
@@ -88,4 +88,21 @@ function IssueRow({ issue, onOpen }: { issue: Issue; onOpen: (id: string) => voi
       </span>
     </button>
   )
+}
+
+function kindLabel(kind: Issue['kind']): string {
+  switch (kind) {
+    case 'unknown-dep':
+      return 'Missing dependency'
+    case 'dep-conflict':
+      return 'Milestone conflict'
+    case 'dep-cycle':
+      return 'Dependency cycle'
+    case 'gantt-invalid':
+      return 'Invalid Gantt range'
+    case 'gantt-effort-mismatch':
+      return 'Effort vs schedule'
+    case 'orphan-milestone':
+      return 'Missing milestone'
+  }
 }

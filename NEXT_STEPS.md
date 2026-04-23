@@ -25,6 +25,7 @@ This file tracks the next product and QA work after the current UX stabilization
 - Hardened task-drawer and module-editor label edits so renames trim cleanly and blank-only input no longer wipes labels.
 - Hardened the Module editor's custom color input so invalid non-hex values are ignored instead of being persisted.
 - Reset transient UI session state consistently across project-open and new-project flows so stale filters, cursors, and overlays do not leak into the next project.
+- Reworded Validation categories and findings so the panel reads like guidance instead of internal error codes.
 - Improved Welcome-screen affordances: the primary open-project action is keyboard reachable, and recent-entry removal stays visible on narrow screens.
 - Final AppImage artifact spot-check completed on the current branch build.
 - AppImage QA pass covered fresh launch, Welcome focus order, sample open, task drawer, palette, close/reopen, and recent-project reopen.

@@ -42,7 +42,10 @@ describe('validate', () => {
     const a = mkFeat({ id: 'a', ms: 'v0.1', deps: [{ id: 'b', reason: '', type: 'build' }] })
     const p = mkProject([a, b])
     const issues = validate(p)
-    expect(issues.some((i) => i.kind === 'dep-conflict' && i.severity === 'warn')).toBe(true)
+    const issue = issues.find((i) => i.kind === 'dep-conflict' && i.severity === 'warn')
+    expect(issue).toBeTruthy()
+    expect(issue?.message).toContain('scheduled for v0.1')
+    expect(issue?.message).toContain('depends on F in v0.2')
   })
 
   it('does not flag optional deps with later milestones', () => {
@@ -57,7 +60,9 @@ describe('validate', () => {
     const a = mkFeat({ id: 'a', ganttStart: 4, ganttEnd: 4 })
     const p = mkProject([a])
     const issues = validate(p)
-    expect(issues.some((i) => i.kind === 'gantt-invalid' && i.severity === 'error')).toBe(true)
+    const issue = issues.find((i) => i.kind === 'gantt-invalid' && i.severity === 'error')
+    expect(issue).toBeTruthy()
+    expect(issue?.message).toContain('must be after start week W4')
   })
 
   it('flags orphan milestone (feature.ms not in meta.milestones) as error', () => {
