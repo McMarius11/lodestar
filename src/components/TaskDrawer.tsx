@@ -72,6 +72,7 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
   const addTask = useProjectStore((s) => s.addTask)
   const deleteTask = useProjectStore((s) => s.deleteTask)
   const updateFeature = useProjectStore((s) => s.updateFeature)
+  const setFeatureGantt = useProjectStore((s) => s.setFeatureGantt)
   const deleteFeature = useProjectStore((s) => s.deleteFeature)
   const addDep = useProjectStore((s) => s.addDep)
   const removeDep = useProjectStore((s) => s.removeDep)
@@ -360,7 +361,7 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
                 onChange={(e) => {
                   const next = parseWeekInput(e.target.value)
                   if (next === null) return
-                  updateFeature(feat.id, { ganttStart: next })
+                  setFeatureGantt(feat.id, { start: next, end: feat.ganttEnd })
                 }}
                 className="num-mono w-14 bg-transparent border border-line/60 px-1.5 py-1 text-center"
               />
@@ -372,7 +373,7 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
                 onChange={(e) => {
                   const next = parseWeekInput(e.target.value)
                   if (next === null) return
-                  updateFeature(feat.id, { ganttEnd: next })
+                  setFeatureGantt(feat.id, { start: feat.ganttStart, end: next })
                 }}
                 className="num-mono w-14 bg-transparent border border-line/60 px-1.5 py-1 text-center"
               />

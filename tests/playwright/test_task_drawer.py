@@ -273,6 +273,28 @@ def test_weeks_blank_input_does_not_corrupt_state(page: Page) -> None:
     log("blank week input leaves gantt values unchanged")
 
 
+def test_weeks_clamp_when_start_moves_past_end(page: Page) -> None:
+    fid = _open_first_feature(page)
+    before = get_project(page)
+    before_feat = feature_by_id(before, fid)  # type: ignore[assignment]
+    before_end = before_feat["ganttEnd"]  # type: ignore[index]
+    target_start = before_end + 2
+    weeks_inputs = page.locator(
+        '[data-testid="dialog-task"] label:has-text("WEEKS") input[type="number"]'
+    )
+    weeks_inputs.nth(0).fill(str(target_start))
+    weeks_inputs.nth(0).blur()
+    wait_idle(page)
+    after = get_project(page)
+    after_feat = feature_by_id(after, fid)  # type: ignore[assignment]
+    assert after_feat["ganttStart"] == target_start  # type: ignore[index]
+    assert after_feat["ganttEnd"] == target_start + 1  # type: ignore[index]
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    log("weeks clamp keeps gantt end ahead of start")
+
+
 def test_add_dependency_via_drawer(page: Page) -> None:
     _open_first_feature(page)
     drawer = page.get_by_test_id("dialog-task")
@@ -423,6 +445,7 @@ TESTS = [
     test_milestone_dropdown,
     test_weeks_inputs,
     test_weeks_blank_input_does_not_corrupt_state,
+    test_weeks_clamp_when_start_moves_past_end,
     test_add_dependency_via_drawer,
     test_delete_feature_from_drawer_footer,
     test_mobile_drawer_stacks_sections_and_keeps_footer_controls_visible,
