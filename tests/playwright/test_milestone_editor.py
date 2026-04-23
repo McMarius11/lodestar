@@ -99,6 +99,36 @@ def test_rename_label(page: Page) -> None:
     log("milestone label rename is persisted on blur")
 
 
+def test_rename_label_trims_and_ignores_blank(page: Page) -> None:
+    _open_milestone_editor(page)
+    row = page.get_by_test_id("milestone-row-v0.2")
+    label_input = row.locator("input").nth(1)
+    label_input.click()
+    label_input.fill("  Trimmed Phase  ")
+    label_input.evaluate("el => el.blur()")
+    wait_idle(page)
+    proj = get_project(page)
+    ms = next(m for m in proj["meta"]["milestones"] if m["id"] == "v0.2")
+    assert ms["label"] == "Trimmed Phase", ms
+
+    label_input = page.get_by_test_id("milestone-row-v0.2").locator("input").nth(1)
+    label_input.click()
+    label_input.fill("   ")
+    label_input.evaluate("el => el.blur()")
+    wait_idle(page)
+    proj_after_blank = get_project(page)
+    ms_after_blank = next(m for m in proj_after_blank["meta"]["milestones"] if m["id"] == "v0.2")
+    assert ms_after_blank["label"] == "Trimmed Phase", ms_after_blank
+
+    label_input = page.get_by_test_id("milestone-row-v0.2").locator("input").nth(1)
+    label_input.click()
+    label_input.fill("Phase 2")
+    label_input.evaluate("el => el.blur()")
+    wait_idle(page)
+    _close_milestone_editor(page)
+    log("milestone label trims whitespace and ignores blank-only edits")
+
+
 def test_reid_cascades_to_features(page: Page) -> None:
     _open_milestone_editor(page)
     before = get_project(page)
@@ -162,7 +192,7 @@ def test_delete_used_milestone_reassigns(page: Page) -> None:
     )
     row = page.get_by_test_id("milestone-row-v0.3")
     # first dialog is confirm-less; used-milestone path opens prompt directly
-    with DialogHandler(page, accept_with="v0.4"):
+    with DialogHandler(page, accept_with=" v0.4 "):
         row.locator("button", has_text="×").click()
     wait_idle(page)
     after = get_project(page)
@@ -176,7 +206,7 @@ def test_delete_used_milestone_reassigns(page: Page) -> None:
     for fid in formerly_v03:
         assert fid in moved, f"{fid} was not reassigned to v0.4"
     _close_milestone_editor(page)
-    log("used milestone deletion reassigns features via prompt target")
+    log("used milestone deletion reassigns features via trimmed prompt target")
 
 
 TESTS = [
@@ -185,6 +215,7 @@ TESTS = [
     test_add_milestone,
     test_duplicate_id_rejected,
     test_rename_label,
+    test_rename_label_trims_and_ignores_blank,
     test_reid_cascades_to_features,
     test_delete_unused_milestone,
     test_delete_used_milestone_reassigns,

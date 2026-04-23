@@ -22,9 +22,13 @@ export function ProjectMetaEditor({ onClose }: { onClose: () => void }) {
 
   const commit = () => {
     const patch: Partial<typeof project.meta> = {}
-    if (name !== project.meta.name) patch.name = name
+    const nextName = name.trim() || project.meta.name
+    if (nextName !== name) setName(nextName)
+    if (nextName !== project.meta.name) patch.name = nextName
     if (description !== project.meta.description) patch.description = description
-    if (version !== project.meta.version) patch.version = version
+    const nextVersion = version.trim() || project.meta.version
+    if (nextVersion !== version) setVersion(nextVersion)
+    if (nextVersion !== project.meta.version) patch.version = nextVersion
     const t = today.trim() === '' ? undefined : Number(today)
     if (t !== project.meta.today && (t === undefined || Number.isFinite(t))) {
       patch.today = t
