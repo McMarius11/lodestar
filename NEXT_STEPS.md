@@ -20,6 +20,7 @@ This file tracks the next product and QA work after the current UX stabilization
 - Fixed task/dependency delete affordances in the task drawer so they stay visible on narrow screens and no longer depend on hover alone.
 - Fixed the Scope view's inline task delete affordance so it no longer disappears completely on narrow screens.
 - Hardened command-palette project rename/version prompts so whitespace-only input is ignored.
+- Normalized feature and module context-menu rename prompts so whitespace-padded no-op labels no longer create redundant history entries.
 - Routed task-drawer week edits through the store clamp so direct edits keep Gantt ranges valid.
 - Hardened project-meta and milestone editors so blank/whitespace-only label edits no longer leave effectively empty names in the UI.
 - Hardened task-drawer and module-editor label edits so renames trim cleanly and blank-only input no longer wipes labels.
