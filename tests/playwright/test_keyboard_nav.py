@@ -182,6 +182,37 @@ def test_ctrl_z_inside_textarea_does_not_trigger_project_undo(page: Page) -> Non
     log("Ctrl+Z inside textarea leaves project history untouched")
 
 
+def test_view_shortcuts_do_not_switch_background_while_drawer_is_open(page: Page) -> None:
+    goto_view(page, "scope")
+    page.keyboard.press("Escape")
+    page.locator('[data-testid="view-scope"] [data-feature-id]').first.click()
+    page.wait_for_selector('[data-testid="dialog-task"]')
+
+    page.keyboard.press("2")
+    page.wait_for_timeout(150)
+
+    assert page.locator('[data-testid="view-scope"]').count() == 1
+    assert page.locator('[data-testid="view-roadmap"]').count() == 0
+    assert page.locator('[data-testid="dialog-task"]').count() == 1
+    close_drawer(page)
+    log("view shortcuts stay blocked while the task drawer is open")
+
+
+def test_ctrl_k_does_not_open_palette_over_drawer(page: Page) -> None:
+    goto_view(page, "scope")
+    page.keyboard.press("Escape")
+    page.locator('[data-testid="view-scope"] [data-feature-id]').first.click()
+    page.wait_for_selector('[data-testid="dialog-task"]')
+
+    page.keyboard.press("Control+k")
+    page.wait_for_timeout(150)
+
+    assert page.locator('[data-testid="dialog-command-palette"]').count() == 0
+    assert page.locator('[data-testid="dialog-task"]').count() == 1
+    close_drawer(page)
+    log("Ctrl+K stays blocked while the task drawer is open")
+
+
 TESTS = [
     test_view_switch_1_to_6,
     test_question_mark_opens_help,
@@ -193,6 +224,8 @@ TESTS = [
     test_cmd_d_duplicates_feature,
     test_typing_guard_inside_input,
     test_ctrl_z_inside_textarea_does_not_trigger_project_undo,
+    test_view_shortcuts_do_not_switch_background_while_drawer_is_open,
+    test_ctrl_k_does_not_open_palette_over_drawer,
 ]
 
 

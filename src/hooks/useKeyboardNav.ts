@@ -28,8 +28,11 @@ export function useKeyboardNav() {
   const setActiveView = useProjectStore((s) => s.setActiveView)
   const openDrawer = useProjectStore((s) => s.openDrawer)
   const drawerId = useProjectStore((s) => s.drawerFeatureId)
+  const depEditorOpen = useProjectStore((s) => s.depEditor !== null)
   const paletteOpen = useProjectStore((s) => s.paletteOpen)
   const helpOpen = useProjectStore((s) => s.helpOpen)
+  const msEditorOpen = useProjectStore((s) => s.msEditorOpen)
+  const metaEditorOpen = useProjectStore((s) => s.metaEditorOpen)
   const togglePalette = useProjectStore((s) => s.togglePalette)
   const toggleHelp = useProjectStore((s) => s.toggleHelp)
   const toggleTask = useProjectStore((s) => s.toggleTask)
@@ -38,6 +41,8 @@ export function useKeyboardNav() {
   const updateFeature = useProjectStore((s) => s.updateFeature)
   const cursorId = useProjectStore((s) => s.cursorFeatureId)
   const setCursorId = useProjectStore((s) => s.setCursorFeature)
+  const modalOpen =
+    drawerId !== null || msEditorOpen || metaEditorOpen || depEditorOpen
 
   const visibleIds = useMemo(() => {
     const ids: string[] = []
@@ -59,6 +64,7 @@ export function useKeyboardNav() {
     const onKey = (e: KeyboardEvent) => {
       if (paletteOpen || helpOpen) return
       if (isTypingIn(e.target)) return
+      if (modalOpen) return
 
       // View switching 1..6
       if (viewMap[e.key]) {
@@ -149,9 +155,13 @@ export function useKeyboardNav() {
     activeView,
     cursorId,
     visibleIds,
+    modalOpen,
     drawerId,
+    depEditorOpen,
     paletteOpen,
     helpOpen,
+    msEditorOpen,
+    metaEditorOpen,
     project,
     setActiveView,
     openDrawer,

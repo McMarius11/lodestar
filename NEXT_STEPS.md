@@ -15,6 +15,7 @@ This file tracks the next product and QA work after the current UX stabilization
 - Fixed Welcome-screen copy for the recent-only state after closing the current project.
 - Hardened external-change handling so disk rewrites no longer clobber unsaved local edits during the save debounce window.
 - Verified both external-change conflict decisions on the desktop build: `Keep mine` and `Reload from disk`.
+- Blocked global view/palette shortcuts while the task drawer or other modal editors are open.
 - Added a regression test that keeps view tabs clickable on a narrow viewport.
 
 ## Immediate QA
@@ -26,7 +27,6 @@ This file tracks the next product and QA work after the current UX stabilization
 
 - Review Welcome screen copy and affordances for first-time users.
 - Review drawer form behavior for label, description, milestone, effort, and week fields.
-- Review keyboard shortcut behavior across dialogs and text inputs.
 - Review save-state messaging and external-change banner behavior during longer edit sessions.
 
 ## Data / Validation Hardening
