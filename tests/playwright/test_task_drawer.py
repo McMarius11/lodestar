@@ -333,6 +333,41 @@ def test_delete_feature_from_drawer_footer(page: Page) -> None:
     log(f"drawer DELETE FEATURE removes {fid!r}, undo restores")
 
 
+def test_mobile_drawer_stacks_sections_and_keeps_footer_controls_visible(page: Page) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    fid = _open_first_feature(page)
+    drawer = page.get_by_test_id("dialog-task")
+    drawer_box = drawer.bounding_box()
+    assert drawer_box is not None
+
+    tasks_heading = drawer.locator("h3", has_text="Tasks").bounding_box()
+    deps_heading = drawer.locator("h3", has_text="Dependencies").bounding_box()
+    weeks_input = page.locator(
+        '[data-testid="dialog-task"] label:has-text("WEEKS") input[type="number"]'
+    ).nth(0).bounding_box()
+    delete_btn = page.locator(
+        '[data-testid="dialog-task"] button', has_text="DELETE FEATURE"
+    ).bounding_box()
+
+    assert tasks_heading is not None
+    assert deps_heading is not None
+    assert weeks_input is not None
+    assert delete_btn is not None
+
+    assert deps_heading["y"] > tasks_heading["y"] + 40, (
+        f"dependencies should stack below tasks on narrow screens: "
+        f"{tasks_heading['y']} vs {deps_heading['y']}"
+    )
+    assert weeks_input["x"] + weeks_input["width"] <= drawer_box["x"] + drawer_box["width"] + 1, (
+        f"weeks input overflowed drawer width: {weeks_input['x']} + {weeks_input['width']} "
+        f"> {drawer_box['x']} + {drawer_box['width']}"
+    )
+    assert delete_btn["x"] >= drawer_box["x"] - 1
+    close_drawer(page)
+    page.set_viewport_size({"width": 1280, "height": 900})
+    log(f"mobile drawer layout stays readable for {fid!r}")
+
+
 TESTS = [
     test_open_via_click,
     test_open_via_context_menu,
@@ -350,6 +385,7 @@ TESTS = [
     test_weeks_blank_input_does_not_corrupt_state,
     test_add_dependency_via_drawer,
     test_delete_feature_from_drawer_footer,
+    test_mobile_drawer_stacks_sections_and_keeps_footer_controls_visible,
 ]
 
 

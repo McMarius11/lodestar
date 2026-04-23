@@ -16,6 +16,7 @@ This file tracks the next product and QA work after the current UX stabilization
 - Hardened external-change handling so disk rewrites no longer clobber unsaved local edits during the save debounce window.
 - Verified both external-change conflict decisions on the desktop build: `Keep mine` and `Reload from disk`.
 - Blocked global view/palette shortcuts while the task drawer or other modal editors are open.
+- Fixed the task drawer layout on narrow screens so sections stack and footer controls stay visible.
 - Added a regression test that keeps view tabs clickable on a narrow viewport.
 
 ## Immediate QA

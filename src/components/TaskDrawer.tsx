@@ -51,7 +51,7 @@ export function TaskDrawer() {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-            className="fixed bottom-0 left-0 right-0 z-50 max-h-[70vh] bg-base border-t border-line-strong/60"
+            className="fixed bottom-0 left-0 right-0 z-50 max-h-[82vh] sm:max-h-[70vh] bg-base border-t border-line-strong/60"
             role="dialog"
             aria-modal="true"
             aria-labelledby="drawer-title"
@@ -100,9 +100,9 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
 
   return (
     <div className="flex flex-col h-full max-h-[70vh]">
-      <div className="flex items-start gap-6 px-8 pt-6 pb-5 border-b border-line/60">
+      <div className="flex flex-col gap-4 px-4 pt-4 pb-4 border-b border-line/60 sm:flex-row sm:items-start sm:gap-6 sm:px-8 sm:pt-6 sm:pb-5">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 label-mono mb-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 label-mono mb-2">
             <span
               className="inline-block w-2 h-2"
               style={{ background: module?.color }}
@@ -143,16 +143,16 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
         </div>
         <button
           onClick={onClose}
-          className="label-mono text-fg-muted hover:text-fg self-start"
+          className="label-mono text-fg-muted hover:text-fg self-start sm:mt-1"
         >
           CLOSE
           <span className="ml-2 num-mono">ESC</span>
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto grid grid-cols-5 gap-8 px-8 py-6 scroll-thin">
+      <div className="flex-1 overflow-auto grid grid-cols-1 gap-6 px-4 py-4 scroll-thin lg:grid-cols-5 lg:gap-8 lg:px-8 lg:py-6">
         {/* Tasks */}
-        <div className="col-span-3 flex flex-col min-w-0">
+        <div className="flex flex-col min-w-0 lg:col-span-3">
           <h3 className="label-mono mb-4 flex items-center justify-between">
             <span>Tasks</span>
             <span className="text-fg-subtle">
@@ -224,7 +224,7 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
         </div>
 
         {/* Dependencies */}
-        <div className="col-span-2 flex flex-col min-w-0">
+        <div className="flex flex-col min-w-0 lg:col-span-2">
           <h3 className="label-mono mb-4 flex items-center gap-2">
             Dependencies
             {conflict && (
@@ -303,7 +303,7 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between px-8 py-3 border-t border-line/60 bg-sunken/50">
+      <div className="flex flex-col gap-3 px-4 py-3 border-t border-line/60 bg-sunken/50 sm:px-8 sm:flex-row sm:items-center sm:justify-between">
         <button
           onClick={() => {
             if (confirm(`Delete feature "${feat.label}"?`)) {
@@ -311,17 +311,17 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
               onClose()
             }
           }}
-          className="label-mono text-fg-subtle hover:text-danger"
+          className="label-mono text-fg-subtle hover:text-danger self-start"
         >
           DELETE FEATURE
         </button>
-        <div className="flex items-center gap-4">
-          <label className="label-mono flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-3 w-full sm:w-auto sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-4">
+          <label className="label-mono flex items-center justify-between gap-2 min-w-0 sm:justify-start">
             MILESTONE
             <select
               value={feat.ms}
               onChange={(e) => updateFeature(feat.id, { ms: e.target.value })}
-              className="label-mono num-mono bg-transparent border border-line/60 px-1.5 py-1"
+              className="label-mono num-mono bg-transparent border border-line/60 px-1.5 py-1 min-w-0"
             >
               {project.meta.milestones.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -330,14 +330,14 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
               ))}
             </select>
           </label>
-          <label className="label-mono flex items-center gap-2">
+          <label className="label-mono flex items-center justify-between gap-2 min-w-0 sm:justify-start">
             EFFORT
             <select
               value={feat.effort}
               onChange={(e) =>
                 updateFeature(feat.id, { effort: e.target.value as Effort })
               }
-              className="label-mono num-mono bg-transparent border border-line/60 px-1.5 py-1"
+              className="label-mono num-mono bg-transparent border border-line/60 px-1.5 py-1 min-w-0"
             >
               {(['S', 'M', 'L', 'XL'] as const).map((e) => (
                 <option key={e} value={e}>
@@ -346,31 +346,33 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
               ))}
             </select>
           </label>
-          <label className="label-mono flex items-center gap-2">
+          <label className="label-mono col-span-2 flex items-center justify-between gap-2 min-w-0 sm:col-span-1 sm:justify-start">
             WEEKS
-            <input
-              type="number"
-              min={0}
-              value={feat.ganttStart}
-              onChange={(e) => {
-                const next = parseWeekInput(e.target.value)
-                if (next === null) return
-                updateFeature(feat.id, { ganttStart: next })
-              }}
-              className="num-mono w-12 bg-transparent border border-line/60 px-1.5 py-1 text-center"
-            />
-            <span className="text-fg-subtle">–</span>
-            <input
-              type="number"
-              min={0}
-              value={feat.ganttEnd}
-              onChange={(e) => {
-                const next = parseWeekInput(e.target.value)
-                if (next === null) return
-                updateFeature(feat.id, { ganttEnd: next })
-              }}
-              className="num-mono w-12 bg-transparent border border-line/60 px-1.5 py-1 text-center"
-            />
+            <span className="ml-auto flex items-center gap-2 sm:ml-0">
+              <input
+                type="number"
+                min={0}
+                value={feat.ganttStart}
+                onChange={(e) => {
+                  const next = parseWeekInput(e.target.value)
+                  if (next === null) return
+                  updateFeature(feat.id, { ganttStart: next })
+                }}
+                className="num-mono w-14 bg-transparent border border-line/60 px-1.5 py-1 text-center"
+              />
+              <span className="text-fg-subtle">–</span>
+              <input
+                type="number"
+                min={0}
+                value={feat.ganttEnd}
+                onChange={(e) => {
+                  const next = parseWeekInput(e.target.value)
+                  if (next === null) return
+                  updateFeature(feat.id, { ganttEnd: next })
+                }}
+                className="num-mono w-14 bg-transparent border border-line/60 px-1.5 py-1 text-center"
+              />
+            </span>
           </label>
         </div>
       </div>
