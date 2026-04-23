@@ -260,7 +260,13 @@ export const useProjectStore = create<State & Actions>()(
       subscribeExternalChange(async () => {
         const st = get()
         const userEditing =
-          st.drawerFeatureId !== null || st.paletteOpen || isInputFocused()
+          st.drawerFeatureId !== null ||
+          st.paletteOpen ||
+          st.helpOpen ||
+          st.msEditorOpen ||
+          st.metaEditorOpen ||
+          st.depEditor !== null ||
+          isInputFocused()
         const hasUnsavedLocalChanges =
           st.saveStatus === 'saving' ||
           st.saveStatus === 'error' ||

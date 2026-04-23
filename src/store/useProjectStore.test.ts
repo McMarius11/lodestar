@@ -178,6 +178,64 @@ describe('useProjectStore external-change handling', () => {
     expect(store.getState().saveStatus).toBe('saved')
     expect(store.getState().project.meta.name).toBe('External Rewrite')
   })
+
+  it('holds external changes behind a conflict state while modal editors are open', async () => {
+    const externalProject = makeProject('External Rewrite')
+    loadProjectFromPathMock.mockResolvedValue({
+      status: 'ok',
+      source: 'disk',
+      project: externalProject,
+      path: '/tmp/project.json',
+    })
+
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+      metaEditorOpen: true,
+    })
+
+    await externalChangeHandler?.()
+
+    expect(loadProjectFromPathMock).not.toHaveBeenCalled()
+    expect(store.getState().externalChangePending).toBe(true)
+    expect(store.getState().saveStatus).toBe('conflict')
+    expect(store.getState().project.meta.name).toBe('Nimbus')
+  })
+
+  it('holds external changes behind a conflict state while the dependency editor is open', async () => {
+    const externalProject = makeProject('External Rewrite')
+    loadProjectFromPathMock.mockResolvedValue({
+      status: 'ok',
+      source: 'disk',
+      project: externalProject,
+      path: '/tmp/project.json',
+    })
+
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+      depEditor: { fromId: 'a', toId: 'b', anchor: { x: 10, y: 20 } },
+    })
+
+    await externalChangeHandler?.()
+
+    expect(loadProjectFromPathMock).not.toHaveBeenCalled()
+    expect(store.getState().externalChangePending).toBe(true)
+    expect(store.getState().saveStatus).toBe('conflict')
+    expect(store.getState().project.meta.name).toBe('Nimbus')
+  })
 })
 
 describe('useProjectStore project-open session resets', () => {
