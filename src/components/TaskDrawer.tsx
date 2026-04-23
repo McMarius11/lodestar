@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { useProjectStore } from '@/store/useProjectStore'
 import { blockedBy, completion, depStatus, featureIndex, hasConflict, milestoneOrder } from '@/lib/deps'
+import { commitInlineEdit } from '@/lib/editable'
 import { StatusGlyph } from './StatusGlyph'
 import { EffortBadge } from './EffortBadge'
 import { ProgressBar } from './ProgressBar'
@@ -104,9 +105,9 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
   const conflict = hasConflict(project, feat)
   const ord = milestoneOrder(project)
   const commitLabel = () => {
-    const next = labelDraft.trim() || feat.label
-    if (next !== labelDraft) setLabelDraft(next)
-    if (next !== feat.label) updateFeature(feat.id, { label: next })
+    const next = commitInlineEdit(feat.label, labelDraft)
+    if (next === null) setLabelDraft(feat.label)
+    else updateFeature(feat.id, { label: next })
   }
 
   return (
