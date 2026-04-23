@@ -34,10 +34,12 @@ This file tracks the next product and QA work after the current UX stabilization
 - Final AppImage artifact spot-check completed on the current branch build.
 - AppImage QA pass covered fresh launch, Welcome focus order, sample open, task drawer, palette, close/reopen, and recent-project reopen.
 - Added a regression test that keeps view tabs clickable on a narrow viewport.
+- Final automated release-candidate pass completed: `typecheck`, full `vitest`, Playwright `smoke.py`, targeted Scope/TaskDrawer regressions, and fresh `electron:build`.
+- Current branch QA summary is captured in `RELEASE_QA.md`.
 
 ## Immediate QA
 
-- Look for clipped text, awkward spacing, hover/focus states, and confusing empty states.
+- Optional final visual once-over after pulling the latest branch build locally.
 
 ## UX Follow-Up
 
@@ -53,6 +55,6 @@ This file tracks the next product and QA work after the current UX stabilization
 
 ## Release / PR
 
-- QA notes from the current AppImage spot-check should be kept in sync with the PR.
+- QA notes from the current branch build now live in `RELEASE_QA.md`.
 - Update version/release notes if shipping a new patch release.
 - Open or refine the GitHub PR with screenshots or short QA notes if useful.
