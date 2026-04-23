@@ -147,6 +147,23 @@ type Actions = {
 const HISTORY_LIMIT = 50
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
+function resetProjectSessionState(state: State): void {
+  state.externalChangePending = false
+  state.activeView = 'scope'
+  state.activeMilestone = 'all'
+  state.activeStatus = 'all'
+  state.cursorFeatureId = null
+  state.drawerFeatureId = null
+  state.paletteOpen = false
+  state.helpOpen = false
+  state.msEditorOpen = false
+  state.metaEditorOpen = false
+  state.history = []
+  state.future = []
+  state.mindmapOverrides = {}
+  state.depEditor = null
+}
+
 function clearPendingSaveTimer(): void {
   if (!saveTimer) return
   clearTimeout(saveTimer)
@@ -273,12 +290,12 @@ export const useProjectStore = create<State & Actions>()(
       if (loaded.status !== 'ok') return false
       clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = loaded.project
         s.source = loaded.source
         s.currentPath = null
         s.saveStatus = 'saved'
         s.savedAt = Date.now()
-        s.externalChangePending = false
       })
       markDefaultSlotOpened(loaded.project.meta.name)
       return true
@@ -297,12 +314,12 @@ export const useProjectStore = create<State & Actions>()(
       const resolvedPath = loaded.path ?? path
       clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = loaded.project
         s.source = 'disk'
         s.currentPath = resolvedPath
         s.saveStatus = 'saved'
         s.savedAt = Date.now()
-        s.externalChangePending = false
       })
       rememberOpened(resolvedPath)
       return true
@@ -314,6 +331,7 @@ export const useProjectStore = create<State & Actions>()(
       const path = res.path
       clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = res.project
         s.source = 'disk'
         s.currentPath = path ?? null
@@ -331,6 +349,7 @@ export const useProjectStore = create<State & Actions>()(
       const path = opts?.path
       clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = p
         s.source = 'disk'
         s.currentPath = path ?? null
@@ -367,11 +386,10 @@ export const useProjectStore = create<State & Actions>()(
       const p = migrate(sampleProject)
       clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = p
         s.source = 'disk'
         s.currentPath = null
-        s.history = []
-        s.future = []
       })
       get()._persist()
       markDefaultSlotOpened(p.meta.name)
@@ -381,11 +399,10 @@ export const useProjectStore = create<State & Actions>()(
       const p = migrate(lodestarRoadmap)
       clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = p
         s.source = 'disk'
         s.currentPath = null
-        s.history = []
-        s.future = []
       })
       get()._persist()
       markDefaultSlotOpened(p.meta.name)
@@ -404,11 +421,10 @@ export const useProjectStore = create<State & Actions>()(
       }
       clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = empty
         s.source = 'disk'
         s.currentPath = null
-        s.history = []
-        s.future = []
       })
       get()._persist()
       markDefaultSlotOpened(empty.meta.name)
@@ -417,6 +433,7 @@ export const useProjectStore = create<State & Actions>()(
     closeCurrentProject: () => {
       clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = {
           meta: {
             name: '',
@@ -429,22 +446,8 @@ export const useProjectStore = create<State & Actions>()(
         }
         s.source = 'none'
         s.currentPath = null
-        s.externalChangePending = false
-        s.activeView = 'scope'
-        s.activeMilestone = 'all'
-        s.activeStatus = 'all'
-        s.history = []
-        s.future = []
-        s.drawerFeatureId = null
-        s.paletteOpen = false
-        s.helpOpen = false
-        s.msEditorOpen = false
-        s.metaEditorOpen = false
         s.saveStatus = 'idle'
         s.savedAt = null
-        s.cursorFeatureId = null
-        s.mindmapOverrides = {}
-        s.depEditor = null
       })
       clearLastSession()
     },
