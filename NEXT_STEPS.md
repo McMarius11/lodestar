@@ -36,6 +36,7 @@ This file tracks the next product and QA work after the current UX stabilization
 - Added a regression test that keeps view tabs clickable on a narrow viewport.
 - Final automated release-candidate pass completed: `typecheck`, full `vitest`, Playwright `smoke.py`, targeted Scope/TaskDrawer regressions, and fresh `electron:build`.
 - Current branch QA summary is captured in `RELEASE_QA.md`.
+- Package metadata is bumped to `0.3.1`, and release notes are drafted in `RELEASE_NOTES_0.3.1.md`.
 
 ## Immediate QA
 
@@ -56,5 +57,5 @@ This file tracks the next product and QA work after the current UX stabilization
 ## Release / PR
 
 - QA notes from the current branch build now live in `RELEASE_QA.md`.
-- Update version/release notes if shipping a new patch release.
+- Patch-release notes now live in `RELEASE_NOTES_0.3.1.md`.
 - Open or refine the GitHub PR with screenshots or short QA notes if useful.

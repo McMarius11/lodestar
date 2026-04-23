@@ -1,7 +1,7 @@
 {
   "name": "lodestar",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Local-first project planner for software work. Electron + React + TS.",
   "author": "Marius Kamm <marius.kamm@protonmail.com>",
   "license": "MIT",

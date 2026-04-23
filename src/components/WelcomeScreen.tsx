@@ -149,7 +149,7 @@ export function WelcomeScreen() {
     <div className="h-full w-full flex items-center justify-center grain overflow-y-auto">
       <div className="max-w-2xl w-full px-6 py-10">
         <div className="flex items-baseline gap-3 mb-1">
-          <span className="label-mono">LODESTAR · v0.3</span>
+          <span className="label-mono">LODESTAR · v0.3.1</span>
           <span className="label-mono text-fg-subtle">project planner</span>
         </div>
         <h1 className="ser-display text-5xl md:text-6xl mb-2 leading-none">

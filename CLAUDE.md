@@ -8,7 +8,7 @@
 
 Ein lokales Projekt-Planungs-Tool speziell für Software-Projekte.
 Daten leben in `data/project.json`. Keine Datenbank, kein Backend.
-Aktuelle Version: **v0.3.0** („Hands on the Data") — die App ist
+Aktuelle Version: **v0.3.1** („Hands on the Data") — die App ist
 durchgehend maus-editierbar: Kontextmenüs in allen fünf Views, Drag & Drop
 in Roadmap/Kanban/Gantt/MindMap, Undo-Tiefe bis 50.
 

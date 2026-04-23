@@ -2,15 +2,16 @@
 
 Current stabilization branch: `refactor/modular-hooks-and-docs`  
 Current PR: `#7`  
+Target patch release: `v0.3.1`  
 Recorded on: `2026-04-23`
 
 ## Current Artifact
 
-- Linux AppImage: `release/Lodestar-0.3.0-linux-x86_64.AppImage`
+- Linux AppImage: `release/Lodestar-0.3.1-linux-x86_64.AppImage`
 - Unpacked desktop build: `release/linux-unpacked/lodestar`
 
-Note: the artifact still carries version `0.3.0`. If we want to ship a new
-patch release, package metadata and release tagging still need to be bumped.
+Note: package metadata is now set to `0.3.1`. Publishing still requires a
+matching git tag push.
 
 ## Automated Verification
 
@@ -47,6 +48,5 @@ Verified on the current branch state:
 
 ## Still To Decide Before Shipping
 
-- Whether this ships as a new patch release
-- Which version to stamp (`0.3.1` would be the natural next patch)
 - Whether to add screenshots or short QA notes to the GitHub PR
+- When to push the final `v0.3.1` git tag and trigger the release workflow
