@@ -24,6 +24,13 @@ function isTypingIn(el: EventTarget | null): boolean {
 export function CommandPalette() {
   const open = useProjectStore((s) => s.paletteOpen)
   const toggle = useProjectStore((s) => s.togglePalette)
+  const drawerOpen = useProjectStore((s) => s.drawerFeatureId !== null)
+  const helpOpen = useProjectStore((s) => s.helpOpen)
+  const msEditorOpen = useProjectStore((s) => s.msEditorOpen)
+  const metaEditorOpen = useProjectStore((s) => s.metaEditorOpen)
+  const depEditorOpen = useProjectStore((s) => s.depEditor !== null)
+  const modalOpen =
+    drawerOpen || helpOpen || msEditorOpen || metaEditorOpen || depEditorOpen
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -32,6 +39,8 @@ export function CommandPalette() {
         toggle(false)
         return
       }
+
+      if (!open && modalOpen) return
 
       if (isTypingIn(e.target)) return
 
@@ -53,7 +62,7 @@ export function CommandPalette() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, toggle])
+  }, [open, modalOpen, toggle])
 
   return (
     <AnimatePresence>
@@ -183,7 +192,10 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       group: 'project',
       run: () => {
         const name = prompt('Project name', store.project.meta.name)
-        if (name) store.updateMeta({ name })
+        const trimmed = name?.trim()
+        if (trimmed && trimmed !== store.project.meta.name) {
+          store.updateMeta({ name: trimmed })
+        }
       },
     })
     list.push({
@@ -193,7 +205,10 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       group: 'project',
       run: () => {
         const v = prompt('Version', store.project.meta.version)
-        if (v) store.updateMeta({ version: v })
+        const trimmed = v?.trim()
+        if (trimmed && trimmed !== store.project.meta.version) {
+          store.updateMeta({ version: trimmed })
+        }
       },
     })
     list.push({

@@ -37,9 +37,9 @@ describe('recentFiles pure transforms', () => {
     expect(out.find((r) => r.path === '/a/one.json')!.when).toBe(5)
   })
 
-  it('upsert dedupes by name when path is absent on both', () => {
-    const a: Recent = { name: 'loose.json', when: 1 }
-    const b: Recent = { name: 'loose.json', when: 9 }
+  it('upsert dedupes pathless entries into a single default-slot recent', () => {
+    const a: Recent = { name: 'Default Slot', when: 1 }
+    const b: Recent = { name: 'Nimbus', when: 9 }
     expect(upsertRecent([a], b)).toEqual([b])
   })
 

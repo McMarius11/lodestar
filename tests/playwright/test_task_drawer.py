@@ -18,6 +18,7 @@ from _lib import (
 
 
 def _goto_scope(page: Page) -> None:
+    close_drawer(page)
     page.get_by_test_id("tab-scope").click()
     page.wait_for_selector('[data-testid="view-scope"]')
 
@@ -29,6 +30,13 @@ def _open_first_feature(page: Page) -> str:
     feat.click()
     page.wait_for_selector('[data-testid="dialog-task"]')
     return fid  # type: ignore[return-value]
+
+
+def _open_feature(page: Page, fid: str) -> str:
+    _goto_scope(page)
+    page.locator(f'[data-testid="view-scope"] [data-feature-id="{fid}"]').first.click()
+    page.wait_for_selector('[data-testid="dialog-task"]')
+    return fid
 
 
 def test_open_via_click(page: Page) -> None:
@@ -93,6 +101,31 @@ def test_label_edit_commits(page: Page) -> None:
     page.get_by_test_id("btn-undo").click()
     wait_idle(page)
     log(f"drawer label edit: {before_label!r} → {new_label!r} → undone")
+
+
+def test_label_edit_trims_and_ignores_blank(page: Page) -> None:
+    fid = _open_first_feature(page)
+    before = get_project(page)
+    before_label = feature_by_id(before, fid)["label"]  # type: ignore[index]
+    trimmed_label = f"{before_label} Prime"
+    inp = page.get_by_test_id("drawer-feature-label")
+    inp.fill(f"  {trimmed_label}  ")
+    inp.blur()
+    wait_idle(page)
+    after_trim = get_project(page)
+    assert feature_by_id(after_trim, fid)["label"] == trimmed_label  # type: ignore[index]
+
+    inp = page.get_by_test_id("drawer-feature-label")
+    inp.fill("   ")
+    inp.blur()
+    wait_idle(page)
+    after_blank = get_project(page)
+    assert feature_by_id(after_blank, fid)["label"] == trimmed_label  # type: ignore[index]
+
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    log("drawer label trims surrounding whitespace and ignores blank-only edits")
 
 
 def test_task_toggle_commits(page: Page) -> None:
@@ -265,6 +298,28 @@ def test_weeks_blank_input_does_not_corrupt_state(page: Page) -> None:
     log("blank week input leaves gantt values unchanged")
 
 
+def test_weeks_clamp_when_start_moves_past_end(page: Page) -> None:
+    fid = _open_first_feature(page)
+    before = get_project(page)
+    before_feat = feature_by_id(before, fid)  # type: ignore[assignment]
+    before_end = before_feat["ganttEnd"]  # type: ignore[index]
+    target_start = before_end + 2
+    weeks_inputs = page.locator(
+        '[data-testid="dialog-task"] label:has-text("WEEKS") input[type="number"]'
+    )
+    weeks_inputs.nth(0).fill(str(target_start))
+    weeks_inputs.nth(0).blur()
+    wait_idle(page)
+    after = get_project(page)
+    after_feat = feature_by_id(after, fid)  # type: ignore[assignment]
+    assert after_feat["ganttStart"] == target_start  # type: ignore[index]
+    assert after_feat["ganttEnd"] == target_start + 1  # type: ignore[index]
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    log("weeks clamp keeps gantt end ahead of start")
+
+
 def test_add_dependency_via_drawer(page: Page) -> None:
     _open_first_feature(page)
     drawer = page.get_by_test_id("dialog-task")
@@ -333,6 +388,73 @@ def test_delete_feature_from_drawer_footer(page: Page) -> None:
     log(f"drawer DELETE FEATURE removes {fid!r}, undo restores")
 
 
+def test_mobile_drawer_stacks_sections_and_keeps_footer_controls_visible(page: Page) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    fid = _open_first_feature(page)
+    drawer = page.get_by_test_id("dialog-task")
+    drawer_box = drawer.bounding_box()
+    assert drawer_box is not None
+
+    tasks_heading = drawer.locator("h3", has_text="Tasks").bounding_box()
+    deps_heading = drawer.locator("h3", has_text="Dependencies").bounding_box()
+    weeks_input = page.locator(
+        '[data-testid="dialog-task"] label:has-text("WEEKS") input[type="number"]'
+    ).nth(0).bounding_box()
+    delete_btn = page.locator(
+        '[data-testid="dialog-task"] button', has_text="DELETE FEATURE"
+    ).bounding_box()
+
+    assert tasks_heading is not None
+    assert deps_heading is not None
+    assert weeks_input is not None
+    assert delete_btn is not None
+
+    assert deps_heading["y"] > tasks_heading["y"] + 40, (
+        f"dependencies should stack below tasks on narrow screens: "
+        f"{tasks_heading['y']} vs {deps_heading['y']}"
+    )
+    assert weeks_input["x"] + weeks_input["width"] <= drawer_box["x"] + drawer_box["width"] + 1, (
+        f"weeks input overflowed drawer width: {weeks_input['x']} + {weeks_input['width']} "
+        f"> {drawer_box['x']} + {drawer_box['width']}"
+    )
+    assert delete_btn["x"] >= drawer_box["x"] - 1
+    close_drawer(page)
+    page.set_viewport_size({"width": 1280, "height": 900})
+    log(f"mobile drawer layout stays readable for {fid!r}")
+
+
+def test_mobile_delete_actions_stay_visible_for_tasks_and_dependencies(page: Page) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    fid = _open_feature(page, "auth")
+    task_delete = page.locator('[aria-label^="Delete task "]').first
+    dep_delete = page.locator('[aria-label^="Remove dependency on "]').first
+    task_opacity = float(task_delete.evaluate("el => getComputedStyle(el).opacity"))
+    dep_opacity = float(dep_delete.evaluate("el => getComputedStyle(el).opacity"))
+    assert task_opacity >= 0.69, f"task delete action should stay visible on mobile, got {task_opacity}"
+    assert dep_opacity >= 0.69, (
+        f"dependency delete action should stay visible on mobile, got {dep_opacity}"
+    )
+    close_drawer(page)
+    page.set_viewport_size({"width": 1280, "height": 900})
+    log(f"mobile delete affordances stay visible for {fid!r}")
+
+
+def test_task_delete_action_is_keyboard_focusable(page: Page) -> None:
+    _open_feature(page, "auth")
+    delete_btn = page.locator('[aria-label^="Delete task "]').first
+    before = float(delete_btn.evaluate("el => getComputedStyle(el).opacity"))
+    focused = delete_btn.evaluate(
+        """el => {
+            el.focus()
+            return document.activeElement === el
+        }"""
+    )
+    assert before >= 0.69, f"expected visible desktop affordance before focus, got {before}"
+    assert focused is True, "expected delete action to be keyboard focusable"
+    close_drawer(page)
+    log("task delete affordance is keyboard focusable")
+
+
 TESTS = [
     test_open_via_click,
     test_open_via_context_menu,
@@ -340,6 +462,7 @@ TESTS = [
     test_esc_closes_while_input_focused,
     test_outside_click_closes,
     test_label_edit_commits,
+    test_label_edit_trims_and_ignores_blank,
     test_task_toggle_commits,
     test_task_add,
     test_task_delete,
@@ -348,8 +471,12 @@ TESTS = [
     test_milestone_dropdown,
     test_weeks_inputs,
     test_weeks_blank_input_does_not_corrupt_state,
+    test_weeks_clamp_when_start_moves_past_end,
     test_add_dependency_via_drawer,
     test_delete_feature_from_drawer_footer,
+    test_mobile_drawer_stacks_sections_and_keeps_footer_controls_visible,
+    test_mobile_delete_actions_stay_visible_for_tasks_and_dependencies,
+    test_task_delete_action_is_keyboard_focusable,
 ]
 
 

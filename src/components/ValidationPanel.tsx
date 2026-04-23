@@ -27,8 +27,8 @@ export function ValidationPanel() {
         </div>
         <p className="text-fg-muted max-w-2xl text-sm">
           {issues.length === 0
-            ? 'Alles sauber. Keine Konflikte, Zyklen oder inkonsistenten Daten gefunden.'
-            : `${issues.length} ${issues.length === 1 ? 'Fund' : 'Funde'} in deinem Projekt. Klick auf ein Feature öffnet den Drawer.`}
+            ? 'All clear. No conflicts, cycles, or inconsistent data found.'
+            : `${issues.length} ${issues.length === 1 ? 'finding' : 'findings'} in your project. Click a feature to open the drawer.`}
         </p>
       </div>
 
@@ -78,7 +78,7 @@ function IssueRow({ issue, onOpen }: { issue: Issue; onOpen: (id: string) => voi
         {sev === 'error' ? 'ERR' : sev === 'warn' ? 'WARN' : 'INFO'}
       </span>
       <span className="label-mono w-[180px] shrink-0 pt-0.5 text-fg-subtle">
-        {issue.kind.toUpperCase()}
+        {kindLabel(issue.kind)}
       </span>
       <span className="flex-1 min-w-0">
         <span className="text-sm text-fg">{issue.message}</span>
@@ -88,4 +88,21 @@ function IssueRow({ issue, onOpen }: { issue: Issue; onOpen: (id: string) => voi
       </span>
     </button>
   )
+}
+
+function kindLabel(kind: Issue['kind']): string {
+  switch (kind) {
+    case 'unknown-dep':
+      return 'Missing dependency'
+    case 'dep-conflict':
+      return 'Milestone conflict'
+    case 'dep-cycle':
+      return 'Dependency cycle'
+    case 'gantt-invalid':
+      return 'Invalid Gantt range'
+    case 'gantt-effort-mismatch':
+      return 'Effort vs schedule'
+    case 'orphan-milestone':
+      return 'Missing milestone'
+  }
 }

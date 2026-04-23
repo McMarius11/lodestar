@@ -47,10 +47,11 @@ export function MilestoneEditor({ onClose }: { onClose: () => void }) {
       `Milestone "${id}" is used by ${n} feature(s).\nReassign them to which milestone?\nAvailable: ${remaining.map((m) => m.id).join(', ')}`,
       remaining[0].id,
     )
-    if (!target || !remaining.some((m) => m.id === target)) return
+    const trimmedTarget = target?.trim()
+    if (!trimmedTarget || !remaining.some((m) => m.id === trimmedTarget)) return
     for (const mod of project.modules) {
       for (const f of mod.features) {
-        if (f.ms === id) updateFeature(f.id, { ms: target })
+        if (f.ms === id) updateFeature(f.id, { ms: trimmedTarget })
       }
     }
     deleteMilestone(id)
@@ -153,8 +154,12 @@ function MilestoneRow({
 
   const commit = () => {
     const patch: { id?: string; label?: string } = {}
-    if (editId.trim() && editId !== id) patch.id = editId.trim()
-    if (editLabel !== label) patch.label = editLabel
+    const nextId = editId.trim()
+    const nextLabel = editLabel.trim()
+    if (nextId !== editId) setEditId(nextId || id)
+    if (nextLabel !== editLabel) setEditLabel(nextLabel || label)
+    if (nextId && nextId !== id) patch.id = nextId
+    if (nextLabel && nextLabel !== label) patch.label = nextLabel
     if (Object.keys(patch).length) onRename(patch)
   }
 

@@ -7,12 +7,15 @@ import sys
 from playwright.sync_api import Page
 
 from _lib import (
+    DialogHandler,
+    click_menu_item,
     dnd_html5,
     feature_by_id,
     get_project,
     goto_view,
     log,
     module_of,
+    open_feature_context_menu,
     run_suite,
     wait_idle,
 )
@@ -131,6 +134,74 @@ def test_chevron_expands_inline_tasks(page: Page) -> None:
     log(f"chevron toggles inline tasks for {fid!r}")
 
 
+def test_inline_task_delete_affordance_stays_visible_on_narrow_screens(page: Page) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    goto_view(page, "scope")
+    row = page.locator('[data-testid="view-scope"] [data-feature-id]').first
+    row.locator('button[aria-label="Expand tasks"]').click()
+    delete_btn = row.locator('[aria-label^="Delete task "]').first
+    opacity = float(delete_btn.evaluate("el => getComputedStyle(el).opacity"))
+    focused = delete_btn.evaluate(
+        """el => {
+            el.focus()
+            return document.activeElement === el
+        }"""
+    )
+    assert opacity >= 0.69, f"expected visible inline delete affordance on narrow screens, got {opacity}"
+    assert focused is True, "expected inline delete affordance to be keyboard focusable"
+    page.set_viewport_size({"width": 1280, "height": 900})
+    log("inline scope-task delete affordance stays visible on narrow screens")
+
+
+def test_feature_context_rename_ignores_same_label_with_whitespace(page: Page) -> None:
+    goto_view(page, "scope")
+    feature = page.locator('[data-testid="view-scope"] [data-feature-id]').first
+    fid = feature.get_attribute("data-feature-id")
+    assert fid is not None
+    before = feature_by_id(get_project(page), fid)
+    assert before is not None
+    before_label = before["label"]
+    before_history = page.evaluate("() => window.__lodestarStore?.getState().history.length ?? -1")
+
+    with DialogHandler(page, accept_with=f"  {before_label}  "):
+        open_feature_context_menu(page, feature)
+        click_menu_item(page, "Rename…")
+    wait_idle(page)
+
+    after = feature_by_id(get_project(page), fid)
+    after_history = page.evaluate("() => window.__lodestarStore?.getState().history.length ?? -1")
+    assert after is not None
+    assert after["label"] == before_label
+    assert after_history == before_history, (
+        "whitespace-padded no-op feature rename should not create a history entry"
+    )
+    log("feature context rename ignores padded no-op labels")
+
+
+def test_module_context_rename_ignores_same_label_with_whitespace(page: Page) -> None:
+    goto_view(page, "scope")
+    module = page.locator("[data-module-id]").first
+    mid = module.get_attribute("data-module-id")
+    assert mid is not None
+    before = next(m for m in get_project(page)["modules"] if m["id"] == mid)
+    before_label = before["label"]
+    before_history = page.evaluate("() => window.__lodestarStore?.getState().history.length ?? -1")
+
+    with DialogHandler(page, accept_with=f"  {before_label}  "):
+        module.locator("header").click(button="right")
+        page.wait_for_selector('[data-testid="context-menu"]')
+        click_menu_item(page, "Rename…")
+    wait_idle(page)
+
+    after = next(m for m in get_project(page)["modules"] if m["id"] == mid)
+    after_history = page.evaluate("() => window.__lodestarStore?.getState().history.length ?? -1")
+    assert after["label"] == before_label
+    assert after_history == before_history, (
+        "whitespace-padded no-op module rename should not create a history entry"
+    )
+    log("module context rename ignores padded no-op labels")
+
+
 def test_right_click_feature_opens_context_menu(page: Page) -> None:
     goto_view(page, "scope")
     row = page.locator('[data-testid="view-scope"] [data-feature-id]').first
@@ -148,6 +219,9 @@ TESTS = [
     test_totals_update_after_mutation,
     test_feature_row_click_opens_drawer,
     test_chevron_expands_inline_tasks,
+    test_inline_task_delete_affordance_stays_visible_on_narrow_screens,
+    test_feature_context_rename_ignores_same_label_with_whitespace,
+    test_module_context_rename_ignores_same_label_with_whitespace,
     test_right_click_feature_opens_context_menu,
 ]
 

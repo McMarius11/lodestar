@@ -31,7 +31,7 @@ export function validate(project: Project): Issue[] {
             kind: 'unknown-dep',
             featureId: f.id,
             moduleId: m.id,
-            message: `${f.label} → unbekannte Dep "${d.id}"`,
+            message: `${f.label} depends on missing feature "${d.id}".`,
           })
           continue
         }
@@ -43,7 +43,7 @@ export function validate(project: Project): Issue[] {
             kind: 'dep-conflict',
             featureId: f.id,
             moduleId: m.id,
-            message: `${f.label} (${f.ms}) braucht ${target.label} (${target.ms})`,
+            message: `${f.label} is scheduled for ${f.ms} but depends on ${target.label} in ${target.ms}.`,
             detail: d.reason,
           })
         }
@@ -54,7 +54,7 @@ export function validate(project: Project): Issue[] {
           kind: 'gantt-invalid',
           featureId: f.id,
           moduleId: m.id,
-          message: `${f.label} — Gantt-Ende ≤ Start (W${f.ganttStart}–W${f.ganttEnd})`,
+          message: `${f.label} has an invalid Gantt range: end week W${f.ganttEnd} must be after start week W${f.ganttStart}.`,
         })
       }
       const span = f.ganttEnd - f.ganttStart
@@ -65,7 +65,7 @@ export function validate(project: Project): Issue[] {
           kind: 'gantt-effort-mismatch',
           featureId: f.id,
           moduleId: m.id,
-          message: `${f.label} — Effort ${f.effort} ≈ ${expected}w, Gantt ${span}w`,
+          message: `${f.label} is estimated as ${f.effort} (~${expected}w) but spans ${span} week${span === 1 ? '' : 's'} on the Gantt.`,
         })
       }
       if (!msIds.has(f.ms)) {
@@ -74,7 +74,7 @@ export function validate(project: Project): Issue[] {
           kind: 'orphan-milestone',
           featureId: f.id,
           moduleId: m.id,
-          message: `${f.label} — Milestone "${f.ms}" existiert nicht`,
+          message: `${f.label} points to missing milestone "${f.ms}".`,
         })
       }
     }
@@ -86,7 +86,7 @@ export function validate(project: Project): Issue[] {
     issues.push({
       severity: 'error',
       kind: 'dep-cycle',
-      message: `Dep-Zyklus: ${labels.join(' → ')}`,
+      message: `Dependency cycle detected: ${labels.join(' → ')}.`,
     })
   }
 

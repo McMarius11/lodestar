@@ -29,7 +29,13 @@ import {
   type LastSession,
 } from '@/lib/lastSession'
 
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
+
+declare global {
+  interface Window {
+    __lodestarStore?: typeof useProjectStore
+  }
+}
 
 export type StatusFilter = 'all' | 'ready' | 'blocked' | 'conflict'
 
@@ -69,6 +75,7 @@ type State = {
 type Actions = {
   init: () => Promise<void>
   openLastSession: () => Promise<boolean>
+  openDefaultProject: () => Promise<boolean>
   openProjectFromPath: (path: string) => Promise<boolean>
   openProjectFromDialog: () => Promise<boolean>
   openProjectFromText: (text: string, opts?: { name?: string; path?: string }) => boolean
@@ -145,6 +152,29 @@ type Actions = {
 
 const HISTORY_LIMIT = 50
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+function resetProjectSessionState(state: State): void {
+  state.externalChangePending = false
+  state.activeView = 'scope'
+  state.activeMilestone = 'all'
+  state.activeStatus = 'all'
+  state.cursorFeatureId = null
+  state.drawerFeatureId = null
+  state.paletteOpen = false
+  state.helpOpen = false
+  state.msEditorOpen = false
+  state.metaEditorOpen = false
+  state.history = []
+  state.future = []
+  state.mindmapOverrides = {}
+  state.depEditor = null
+}
+
+function clearPendingSaveTimer(): void {
+  if (!saveTimer) return
+  clearTimeout(saveTimer)
+  saveTimer = null
+}
 
 function basenameOf(p: string): string {
   const parts = p.split(/[/\\]/)
@@ -236,9 +266,23 @@ export const useProjectStore = create<State & Actions>()(
       subscribeExternalChange(async () => {
         const st = get()
         const userEditing =
-          st.drawerFeatureId !== null || st.paletteOpen || isInputFocused()
-        if (userEditing) {
-          set((s) => void (s.externalChangePending = true))
+          st.drawerFeatureId !== null ||
+          st.paletteOpen ||
+          st.helpOpen ||
+          st.msEditorOpen ||
+          st.metaEditorOpen ||
+          st.depEditor !== null ||
+          isInputFocused()
+        const hasUnsavedLocalChanges =
+          st.saveStatus === 'saving' ||
+          st.saveStatus === 'error' ||
+          st.externalChangePending
+        if (userEditing || hasUnsavedLocalChanges) {
+          clearPendingSaveTimer()
+          set((s) => {
+            s.externalChangePending = true
+            s.saveStatus = 'conflict'
+          })
           return
         }
         await get().reloadFromDisk()
@@ -250,16 +294,22 @@ export const useProjectStore = create<State & Actions>()(
       if (last?.path) return get().openProjectFromPath(last.path)
       // No remembered path (browser build, or first-ever Electron boot that
       // somehow wrote an unpathed entry) — fall back to the canonical slot.
+      return get().openDefaultProject()
+    },
+
+    openDefaultProject: async () => {
       const loaded = await loadProject()
       if (loaded.status !== 'ok') return false
+      clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = loaded.project
         s.source = loaded.source
         s.currentPath = null
         s.saveStatus = 'saved'
         s.savedAt = Date.now()
       })
-      saveLastSession({ path: null, when: Date.now() })
+      markDefaultSlotOpened(loaded.project.meta.name)
       return true
     },
 
@@ -274,13 +324,14 @@ export const useProjectStore = create<State & Actions>()(
         return false
       }
       const resolvedPath = loaded.path ?? path
+      clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = loaded.project
         s.source = 'disk'
         s.currentPath = resolvedPath
         s.saveStatus = 'saved'
         s.savedAt = Date.now()
-        s.externalChangePending = false
       })
       rememberOpened(resolvedPath)
       return true
@@ -290,7 +341,9 @@ export const useProjectStore = create<State & Actions>()(
       const res = await importProject()
       if (!res) return false
       const path = res.path
+      clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = res.project
         s.source = 'disk'
         s.currentPath = path ?? null
@@ -306,7 +359,9 @@ export const useProjectStore = create<State & Actions>()(
       const p = importProjectFromText(text)
       if (!p) return false
       const path = opts?.path
+      clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = p
         s.source = 'disk'
         s.currentPath = path ?? null
@@ -323,6 +378,7 @@ export const useProjectStore = create<State & Actions>()(
         ? await loadProjectFromPath(currentPath)
         : await loadProject()
       if (loaded.status !== 'ok') return
+      clearPendingSaveTimer()
       set((s) => {
         s.project = loaded.project
         s.source = loaded.source
@@ -333,18 +389,19 @@ export const useProjectStore = create<State & Actions>()(
     },
 
     dismissExternalChange: () => {
+      clearPendingSaveTimer()
       set((s) => void (s.externalChangePending = false))
       get()._persist()
     },
 
     loadSample: () => {
       const p = migrate(sampleProject)
+      clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = p
         s.source = 'disk'
         s.currentPath = null
-        s.history = []
-        s.future = []
       })
       get()._persist()
       markDefaultSlotOpened(p.meta.name)
@@ -352,12 +409,12 @@ export const useProjectStore = create<State & Actions>()(
 
     loadLodestarRoadmap: () => {
       const p = migrate(lodestarRoadmap)
+      clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = p
         s.source = 'disk'
         s.currentPath = null
-        s.history = []
-        s.future = []
       })
       get()._persist()
       markDefaultSlotOpened(p.meta.name)
@@ -374,19 +431,21 @@ export const useProjectStore = create<State & Actions>()(
         },
         modules: [],
       }
+      clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = empty
         s.source = 'disk'
         s.currentPath = null
-        s.history = []
-        s.future = []
       })
       get()._persist()
       markDefaultSlotOpened(empty.meta.name)
     },
 
     closeCurrentProject: () => {
+      clearPendingSaveTimer()
       set((s) => {
+        resetProjectSessionState(s)
         s.project = {
           meta: {
             name: '',
@@ -399,22 +458,8 @@ export const useProjectStore = create<State & Actions>()(
         }
         s.source = 'none'
         s.currentPath = null
-        s.externalChangePending = false
-        s.activeView = 'scope'
-        s.activeMilestone = 'all'
-        s.activeStatus = 'all'
-        s.history = []
-        s.future = []
-        s.drawerFeatureId = null
-        s.paletteOpen = false
-        s.helpOpen = false
-        s.msEditorOpen = false
-        s.metaEditorOpen = false
         s.saveStatus = 'idle'
         s.savedAt = null
-        s.cursorFeatureId = null
-        s.mindmapOverrides = {}
-        s.depEditor = null
       })
       clearLastSession()
     },
@@ -921,11 +966,21 @@ export const useProjectStore = create<State & Actions>()(
 
     _persist: () => {
       if (get().source === 'none') return
+      clearPendingSaveTimer()
+      if (get().externalChangePending) {
+        set((s) => void (s.saveStatus = 'conflict'))
+        return
+      }
       set((s) => void (s.saveStatus = 'saving'))
-      if (saveTimer) clearTimeout(saveTimer)
       saveTimer = setTimeout(async () => {
+        saveTimer = null
         try {
-          const { project, currentPath } = get()
+          const { project, currentPath, source, externalChangePending } = get()
+          if (source === 'none') return
+          if (externalChangePending) {
+            set((s) => void (s.saveStatus = 'conflict'))
+            return
+          }
           await saveProject(project, currentPath ?? undefined)
           set((s) => {
             s.saveStatus = 'saved'
@@ -940,6 +995,10 @@ export const useProjectStore = create<State & Actions>()(
     }
   }),
 )
+
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  window.__lodestarStore = useProjectStore
+}
 
 function isInputFocused(): boolean {
   if (typeof document === 'undefined') return false

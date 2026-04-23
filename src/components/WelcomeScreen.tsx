@@ -10,7 +10,11 @@ function basenameOf(p: string): string {
 }
 
 function formatWhen(ts: number): string {
-  return new Date(ts).toISOString().slice(0, 10)
+  const d = new Date(ts)
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
 }
 
 export function WelcomeScreen() {
@@ -18,6 +22,7 @@ export function WelcomeScreen() {
   const openProjectFromDialog = useProjectStore((s) => s.openProjectFromDialog)
   const openProjectFromText = useProjectStore((s) => s.openProjectFromText)
   const openLastSession = useProjectStore((s) => s.openLastSession)
+  const openDefaultProject = useProjectStore((s) => s.openDefaultProject)
   const recentsFn = useProjectStore((s) => s.recents)
   const lastSessionFn = useProjectStore((s) => s.lastSession)
   const forgetRecent = useProjectStore((s) => s.forgetRecent)
@@ -30,6 +35,7 @@ export function WelcomeScreen() {
   const [name, setName] = useState('')
   const [recents, setRecents] = useState<Recent[]>([])
   const [last, setLast] = useState<LastSession | null>(null)
+  const hasProjectApi = typeof window !== 'undefined' && Boolean(window.projectAPI)
 
   const refreshLists = useCallback(() => {
     setRecents(recentsFn())
@@ -50,6 +56,8 @@ export function WelcomeScreen() {
     // entry, if any. Otherwise a generic label.
     return recents[0]?.name ?? 'your last project'
   }, [last, recents])
+  const hasRecentProjects = recents.length > 0
+  const hasDesktopOnlyRecents = recents.some((r) => r.path && !hasProjectApi)
 
   const onContinue = useCallback(async () => {
     setError(null)
@@ -62,15 +70,20 @@ export function WelcomeScreen() {
 
   const onReopenRecent = useCallback(
     async (r: Recent) => {
-      if (!r.path) return
       setError(null)
-      const ok = await openProjectFromPath(r.path)
+      const ok = r.path
+        ? await openProjectFromPath(r.path)
+        : await openDefaultProject()
       if (!ok) {
-        setError(`File moved or deleted: ${r.name}`)
+        setError(
+          r.path
+            ? `File moved or deleted: ${r.name}`
+            : `Could not reopen the default local slot: ${r.name}`,
+        )
         refreshLists()
       }
     },
-    [openProjectFromPath, refreshLists],
+    [openDefaultProject, openProjectFromPath, refreshLists],
   )
 
   const onBrowse = useCallback(async () => {
@@ -136,16 +149,21 @@ export function WelcomeScreen() {
     <div className="h-full w-full flex items-center justify-center grain overflow-y-auto">
       <div className="max-w-2xl w-full px-6 py-10">
         <div className="flex items-baseline gap-3 mb-1">
-          <span className="label-mono">LODESTAR · v0.3</span>
+          <span className="label-mono">LODESTAR · v0.3.1</span>
           <span className="label-mono text-fg-subtle">project planner</span>
         </div>
         <h1 className="ser-display text-5xl md:text-6xl mb-2 leading-none">
-          {continueLabel ? 'Welcome back.' : 'Nothing yet.'}
+          {continueLabel || hasRecentProjects ? 'Welcome back.' : 'Nothing yet.'}
         </h1>
         <p className="text-fg-muted mb-8 max-w-md">
           {continueLabel ? (
             <>
               Pick up where you left off, or open a different{' '}
+              <span className="num-mono text-fg">project.json</span>.
+            </>
+          ) : hasRecentProjects ? (
+            <>
+              Re-open one of your recent projects, or open a different{' '}
               <span className="num-mono text-fg">project.json</span>.
             </>
           ) : (
@@ -173,7 +191,8 @@ export function WelcomeScreen() {
           </motion.button>
         )}
 
-        <motion.div
+        <motion.button
+          type="button"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
@@ -184,12 +203,14 @@ export function WelcomeScreen() {
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           className={[
-            'relative border border-dashed p-6 mb-6 cursor-pointer transition-colors',
+            'relative w-full border border-dashed p-6 mb-6 cursor-pointer text-left transition-colors',
             dragging
               ? 'border-accent bg-accent/5'
-              : 'border-line/60 hover:border-line-strong/80',
+              : 'border-line/60 hover:border-line-strong/80 focus-visible:border-accent focus-visible:bg-accent/5',
           ].join(' ')}
           onClick={onBrowse}
+          aria-label="Open a project.json"
+          data-testid="welcome-open-project"
         >
           <div className="flex items-center gap-4">
             <div className="text-3xl ser-display text-accent">↓</div>
@@ -202,7 +223,7 @@ export function WelcomeScreen() {
               </div>
             </div>
           </div>
-        </motion.div>
+        </motion.button>
 
         {error && (
           <div className="mb-6 border border-danger/40 bg-danger/5 px-4 py-2 text-sm text-danger">
@@ -251,54 +272,59 @@ export function WelcomeScreen() {
             <div className="label-mono mb-2 text-fg-subtle">RECENT</div>
             <div className="space-y-1">
               {recents.map((r) => {
-                const clickable = Boolean(
-                  r.path && typeof window !== 'undefined' && window.projectAPI,
-                )
+                const clickable = r.path ? hasProjectApi : true
                 const key = (r.path ?? r.name) + r.when
-                if (clickable) {
-                  return (
-                    <div
-                      key={key}
-                      className="flex items-center hover:bg-raised/60 label-mono transition-colors group"
-                      title={r.path}
-                    >
-                      <button
-                        onClick={() => onReopenRecent(r)}
-                        className="flex-1 flex items-center justify-between py-1.5 px-2 text-left"
-                      >
-                        <span className="num-mono text-fg group-hover:text-accent truncate">
-                          {r.name}
-                        </span>
-                        <span className="text-fg-subtle shrink-0 ml-4">
-                          {formatWhen(r.when)}
-                        </span>
-                      </button>
-                      <button
-                        onClick={(e) => onForgetRecent(r, e)}
-                        aria-label={`Remove ${r.name} from recents`}
-                        className="px-2 py-1.5 text-fg-subtle hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )
-                }
                 return (
                   <div
                     key={key}
-                    className="flex items-center justify-between py-1.5 px-2 hover:bg-raised/40 label-mono"
-                    title="Drop this file again to re-open it (path not captured)"
+                    className={[
+                      'flex items-center label-mono transition-colors group',
+                      clickable
+                        ? 'hover:bg-raised/60 focus-within:bg-raised/60'
+                        : 'bg-raised/20',
+                    ].join(' ')}
+                    title={r.path}
                   >
-                    <span className="num-mono text-fg-muted truncate">{r.name}</span>
-                    <span className="text-fg-subtle shrink-0 ml-4">
-                      {formatWhen(r.when)}
-                    </span>
+                    <button
+                      onClick={() => clickable && onReopenRecent(r)}
+                      disabled={!clickable}
+                      className={[
+                        'flex-1 flex items-center justify-between py-1.5 px-2 text-left min-w-0',
+                        clickable ? '' : 'cursor-not-allowed opacity-70',
+                      ].join(' ')}
+                    >
+                      <span className="min-w-0">
+                        <span
+                          className={[
+                            'num-mono truncate block',
+                            clickable ? 'text-fg group-hover:text-accent' : 'text-fg-muted',
+                          ].join(' ')}
+                        >
+                          {r.name}
+                        </span>
+                        <span className="label-mono text-fg-subtle block mt-0.5">
+                          {r.path ? (clickable ? r.path : 'DESKTOP APP REQUIRED') : 'DEFAULT SLOT'}
+                        </span>
+                      </span>
+                      <span className="text-fg-subtle shrink-0 ml-4">
+                        {formatWhen(r.when)}
+                      </span>
+                    </button>
+                    <button
+                      onClick={(e) => onForgetRecent(r, e)}
+                      aria-label={`Remove ${r.name} from recents`}
+                      className="px-2 py-1.5 text-fg-subtle hover:text-danger opacity-100 focus:opacity-100 group-focus-within:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                    >
+                      ×
+                    </button>
                   </div>
                 )
               })}
             </div>
             <p className="label-mono text-fg-subtle mt-2">
-              Click to re-open · × removes the entry · drop the file again to recapture its path
+              {hasDesktopOnlyRecents
+                ? 'Desktop-only recents stay visible here · × removes the entry'
+                : 'Click to re-open · × removes the entry'}
             </p>
           </div>
         )}

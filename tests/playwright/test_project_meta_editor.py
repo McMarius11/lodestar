@@ -116,6 +116,30 @@ def test_name_blur_commits(page: Page) -> None:
     log("name field blur-commits")
 
 
+def test_name_blur_trims_and_ignores_blank(page: Page) -> None:
+    _open_meta_editor(page)
+    before = get_project(page)
+    before_name = before["meta"]["name"]
+    trimmed_name = f"{before_name} Prime"
+    _fill_field(page, "Name", f"  {trimmed_name}  ")
+    _blur_field(page, "Name")
+    wait_idle(page)
+    after_trim = get_project(page)
+    assert after_trim["meta"]["name"] == trimmed_name, after_trim["meta"]["name"]
+
+    _fill_field(page, "Name", "   ")
+    _blur_field(page, "Name")
+    wait_idle(page)
+    after_blank = get_project(page)
+    assert after_blank["meta"]["name"] == trimmed_name, after_blank["meta"]["name"]
+
+    _fill_field(page, "Name", before_name)
+    _blur_field(page, "Name")
+    wait_idle(page)
+    _close_meta_editor(page)
+    log("name field trims surrounding whitespace and ignores blank-only edits")
+
+
 def test_description_blur_commits(page: Page) -> None:
     _open_meta_editor(page)
     before = get_project(page)
@@ -151,6 +175,33 @@ def test_version_blur_commits(page: Page) -> None:
     wait_idle(page)
     _close_meta_editor(page)
     log("version blur-commits")
+
+
+def test_version_blur_trims_and_ignores_blank(page: Page) -> None:
+    _open_meta_editor(page)
+    before = get_project(page)
+    before_version = before["meta"]["version"]
+    inp = _field(page, "Version")
+    inp.click()
+    inp.fill("  9.9.8  ")
+    inp.evaluate("el => el.blur()")
+    wait_idle(page)
+    after_trim = get_project(page)
+    assert after_trim["meta"]["version"] == "9.9.8", after_trim["meta"]["version"]
+
+    inp.click()
+    inp.fill("   ")
+    inp.evaluate("el => el.blur()")
+    wait_idle(page)
+    after_blank = get_project(page)
+    assert after_blank["meta"]["version"] == "9.9.8", after_blank["meta"]["version"]
+
+    inp.click()
+    inp.fill(before_version)
+    inp.evaluate("el => el.blur()")
+    wait_idle(page)
+    _close_meta_editor(page)
+    log("version field trims surrounding whitespace and ignores blank-only edits")
 
 
 def test_today_numeric_commits(page: Page) -> None:
@@ -224,8 +275,10 @@ TESTS = [
     test_esc_closes,
     test_backdrop_click_closes,
     test_name_blur_commits,
+    test_name_blur_trims_and_ignores_blank,
     test_description_blur_commits,
     test_version_blur_commits,
+    test_version_blur_trims_and_ignores_blank,
     test_today_numeric_commits,
     test_today_strips_non_numeric,
     test_save_button_commits_and_closes,

@@ -24,6 +24,15 @@ def test_tabs_via_click(page: Page) -> None:
     log("tab click-navigation covers all six views")
 
 
+def test_tabs_still_clickable_on_narrow_viewport(page: Page) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.get_by_test_id("tab-roadmap").click()
+    page.wait_for_selector('[data-testid="view-roadmap"]')
+    assert page.get_by_test_id("tab-roadmap").get_attribute("aria-selected") == "true"
+    page.set_viewport_size({"width": 1280, "height": 720})
+    log("tabs remain clickable on a narrow viewport")
+
+
 def test_tabs_via_keyboard_1_to_6(page: Page) -> None:
     # Make sure nothing is focused on an input
     page.keyboard.press("Escape")
@@ -187,6 +196,7 @@ def test_footer_count_shape(page: Page) -> None:
 
 TESTS = [
     test_tabs_via_click,
+    test_tabs_still_clickable_on_narrow_viewport,
     test_tabs_via_keyboard_1_to_6,
     test_milestone_filter_pills,
     test_status_filter_pills,

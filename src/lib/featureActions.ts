@@ -36,6 +36,12 @@ type Api = {
   openDepEditor: (fromId: string, toId: string, anchor: { x: number; y: number }) => void
 }
 
+function normalizePromptRename(current: string, next: string | null): string | null {
+  const trimmed = next?.trim()
+  if (!trimmed || trimmed === current) return null
+  return trimmed
+}
+
 export function featureMenu(api: Api, feature: Feature): CtxMenuItem[] {
   const f = feature
   const { project } = api
@@ -93,9 +99,9 @@ export function featureMenu(api: Api, feature: Feature): CtxMenuItem[] {
       label: 'Rename…',
       hint: 'F2',
       run: () => {
-        const next = prompt('Rename feature', f.label)
-        if (next && next.trim() && next !== f.label) {
-          api.updateFeature(f.id, { label: next.trim() })
+        const next = normalizePromptRename(f.label, prompt('Rename feature', f.label))
+        if (next) {
+          api.updateFeature(f.id, { label: next })
         }
       },
     },
@@ -192,9 +198,9 @@ export function moduleMenu(api: Api, mod: Module): CtxMenuItem[] {
       kind: 'action',
       label: 'Rename…',
       run: () => {
-        const next = prompt('Rename module', mod.label)
-        if (next && next.trim() && next !== mod.label) {
-          api.updateModule(mod.id, { label: next.trim() })
+        const next = normalizePromptRename(mod.label, prompt('Rename module', mod.label))
+        if (next) {
+          api.updateModule(mod.id, { label: next })
         }
       },
     },

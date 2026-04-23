@@ -135,7 +135,7 @@ function Footer() {
 
   return (
     <footer className="border-t border-line/60 bg-void/80 backdrop-blur-sm">
-      <div className="flex items-center gap-6 px-5 py-2 label-mono overflow-x-auto scroll-thin">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-2 label-mono">
         <span>
           <span className="text-fg-subtle">MOD</span>{' '}
           <span className="num-mono text-fg">
@@ -159,7 +159,7 @@ function Footer() {
           </span>
         </span>
         <span
-          className="ml-auto text-fg-subtle truncate max-w-[40ch]"
+          className="text-fg-subtle truncate max-w-full sm:ml-auto sm:max-w-[40ch]"
           title={source === 'disk' && currentPath ? currentPath : undefined}
         >
           {locationLabel}
