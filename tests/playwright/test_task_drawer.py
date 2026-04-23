@@ -103,6 +103,31 @@ def test_label_edit_commits(page: Page) -> None:
     log(f"drawer label edit: {before_label!r} → {new_label!r} → undone")
 
 
+def test_label_edit_trims_and_ignores_blank(page: Page) -> None:
+    fid = _open_first_feature(page)
+    before = get_project(page)
+    before_label = feature_by_id(before, fid)["label"]  # type: ignore[index]
+    trimmed_label = f"{before_label} Prime"
+    inp = page.get_by_test_id("drawer-feature-label")
+    inp.fill(f"  {trimmed_label}  ")
+    inp.blur()
+    wait_idle(page)
+    after_trim = get_project(page)
+    assert feature_by_id(after_trim, fid)["label"] == trimmed_label  # type: ignore[index]
+
+    inp = page.get_by_test_id("drawer-feature-label")
+    inp.fill("   ")
+    inp.blur()
+    wait_idle(page)
+    after_blank = get_project(page)
+    assert feature_by_id(after_blank, fid)["label"] == trimmed_label  # type: ignore[index]
+
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    log("drawer label trims surrounding whitespace and ignores blank-only edits")
+
+
 def test_task_toggle_commits(page: Page) -> None:
     fid = _open_first_feature(page)
     before = get_project(page)
@@ -437,6 +462,7 @@ TESTS = [
     test_esc_closes_while_input_focused,
     test_outside_click_closes,
     test_label_edit_commits,
+    test_label_edit_trims_and_ignores_blank,
     test_task_toggle_commits,
     test_task_add,
     test_task_delete,

@@ -108,6 +108,38 @@ def test_label_blur_commits(page: Page) -> None:
     log("module label blur-commits to store")
 
 
+def test_label_blur_trims_and_ignores_blank(page: Page) -> None:
+    mid = _first_module_id(page)
+    before = get_project(page)
+    before_label = next(m["label"] for m in before["modules"] if m["id"] == mid)
+    trimmed_label = f"{before_label} Prime"
+    _open_editor_via_swatch(page, mid)
+    inp = page.get_by_test_id("module-editor-label")
+    inp.fill(f"  {trimmed_label}  ")
+    inp.evaluate("el => el.blur()")
+    wait_idle(page)
+    after_trim = get_project(page)
+    got_trimmed = next(m["label"] for m in after_trim["modules"] if m["id"] == mid)
+    assert got_trimmed == trimmed_label, (got_trimmed, trimmed_label)
+
+    _open_editor_via_swatch(page, mid)
+    inp = page.get_by_test_id("module-editor-label")
+    inp.fill("   ")
+    inp.evaluate("el => el.blur()")
+    wait_idle(page)
+    after_blank = get_project(page)
+    got_after_blank = next(m["label"] for m in after_blank["modules"] if m["id"] == mid)
+    assert got_after_blank == trimmed_label, got_after_blank
+
+    _open_editor_via_swatch(page, mid)
+    inp = page.get_by_test_id("module-editor-label")
+    inp.fill(before_label)
+    inp.evaluate("el => el.blur()")
+    wait_idle(page)
+    _close_module_editor(page)
+    log("module label trims surrounding whitespace and ignores blank-only edits")
+
+
 def test_preset_color_click(page: Page) -> None:
     mid = _first_module_id(page)
     before = get_project(page)
@@ -138,7 +170,9 @@ def test_custom_hex_on_blur(page: Page) -> None:
     _open_editor_via_swatch(page, mid)
     dialog = page.get_by_test_id("dialog-module")
     hex_inp = dialog.locator('input[placeholder="#HEX"]')
-    hex_inp.fill("#ABCDEF")
+    hex_inp.click()
+    page.keyboard.press("Control+A")
+    page.keyboard.type("#ABCDEF")
     hex_inp.evaluate("el => el.blur()")
     wait_idle(page)
     after = get_project(page)
@@ -146,6 +180,25 @@ def test_custom_hex_on_blur(page: Page) -> None:
     assert got.lower() == "#abcdef", got
     _close_module_editor(page)
     log("custom hex color commits on blur")
+
+
+def test_invalid_custom_hex_is_ignored(page: Page) -> None:
+    mid = _first_module_id(page)
+    before = get_project(page)
+    before_color = next(m["color"] for m in before["modules"] if m["id"] == mid)
+    _open_editor_via_swatch(page, mid)
+    dialog = page.get_by_test_id("dialog-module")
+    hex_inp = dialog.locator('input[placeholder="#HEX"]')
+    hex_inp.click()
+    page.keyboard.press("Control+A")
+    page.keyboard.type("not-a-color")
+    hex_inp.evaluate("el => el.blur()")
+    wait_idle(page)
+    after = get_project(page)
+    got = next(m["color"] for m in after["modules"] if m["id"] == mid)
+    assert got == before_color, got
+    _close_module_editor(page)
+    log("invalid custom color input is ignored")
 
 
 def test_esc_closes(page: Page) -> None:
@@ -213,8 +266,10 @@ TESTS = [
     test_opens_via_title_button,
     test_label_autofocus,
     test_label_blur_commits,
+    test_label_blur_trims_and_ignores_blank,
     test_preset_color_click,
     test_custom_hex_on_blur,
+    test_invalid_custom_hex_is_ignored,
     test_esc_closes,
     test_outside_click_closes,
     test_delete_module_with_confirm,

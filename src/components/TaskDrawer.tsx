@@ -81,6 +81,11 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
   const idx = featureIndex(project)
   const feat = idx.get(id)
   const [newTask, setNewTask] = useState('')
+  const [labelDraft, setLabelDraft] = useState('')
+
+  useEffect(() => {
+    if (feat) setLabelDraft(feat.label)
+  }, [feat?.id, feat?.label])
 
   if (!feat) {
     return (
@@ -98,6 +103,11 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
   const blockers = blockedBy(project, feat)
   const conflict = hasConflict(project, feat)
   const ord = milestoneOrder(project)
+  const commitLabel = () => {
+    const next = labelDraft.trim() || feat.label
+    if (next !== labelDraft) setLabelDraft(next)
+    if (next !== feat.label) updateFeature(feat.id, { label: next })
+  }
 
   return (
     <div className="flex flex-col h-full max-h-[70vh]">
@@ -120,8 +130,15 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
           </div>
           <input
             id="drawer-title"
-            value={feat.label}
-            onChange={(e) => updateFeature(feat.id, { label: e.target.value })}
+            value={labelDraft}
+            onChange={(e) => setLabelDraft(e.target.value)}
+            onBlur={commitLabel}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                e.currentTarget.blur()
+              }
+            }}
             aria-label="Feature label"
             data-testid="drawer-feature-label"
             className="ser-display text-3xl text-fg w-full outline-none bg-transparent"

@@ -21,6 +21,11 @@ const PRESETS = [
   '#57534E',
 ]
 
+function normalizeModuleColor(value: string, fallback: string): string {
+  const trimmed = value.trim().toLowerCase()
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(trimmed) ? trimmed : fallback
+}
+
 export function ModuleEditor({
   module,
   anchor,
@@ -37,6 +42,11 @@ export function ModuleEditor({
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    setLabel(module.label)
+    setColor(module.color)
+  }, [module.id, module.label, module.color])
+
+  useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
@@ -51,10 +61,14 @@ export function ModuleEditor({
     }
   }, [onClose])
 
-  const commit = () => {
+  const commit = (overrides?: { label?: string; color?: string }) => {
     const patch: Partial<Module> = {}
-    if (label !== module.label) patch.label = label
-    if (color !== module.color) patch.color = color
+    const nextLabel = (overrides?.label ?? label).trim() || module.label
+    if (nextLabel !== label) setLabel(nextLabel)
+    if (nextLabel !== module.label) patch.label = nextLabel
+    const nextColor = normalizeModuleColor(overrides?.color ?? color, module.color)
+    if (nextColor !== color) setColor(nextColor)
+    if (nextColor !== module.color) patch.color = nextColor
     if (Object.keys(patch).length) updateModule(module.id, patch)
   }
 
@@ -88,10 +102,10 @@ export function ModuleEditor({
             autoFocus
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            onBlur={commit}
+            onBlur={(e) => commit({ label: e.currentTarget.value })}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                commit()
+                commit({ label: e.currentTarget.value })
                 onClose()
               }
             }}
@@ -130,10 +144,10 @@ export function ModuleEditor({
             <input
               value={color}
               onChange={(e) => setColor(e.target.value)}
-              onBlur={commit}
+              onBlur={(e) => commit({ color: e.currentTarget.value })}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  commit()
+                  commit({ color: e.currentTarget.value })
                   onClose()
                 }
               }}

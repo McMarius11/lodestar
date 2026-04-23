@@ -22,6 +22,8 @@ This file tracks the next product and QA work after the current UX stabilization
 - Hardened command-palette project rename/version prompts so whitespace-only input is ignored.
 - Routed task-drawer week edits through the store clamp so direct edits keep Gantt ranges valid.
 - Hardened project-meta and milestone editors so blank/whitespace-only label edits no longer leave effectively empty names in the UI.
+- Hardened task-drawer and module-editor label edits so renames trim cleanly and blank-only input no longer wipes labels.
+- Hardened the Module editor's custom color input so invalid non-hex values are ignored instead of being persisted.
 - Improved Welcome-screen affordances: the primary open-project action is keyboard reachable, and recent-entry removal stays visible on narrow screens.
 - Final AppImage artifact spot-check completed on the current branch build.
 - AppImage QA pass covered fresh launch, Welcome focus order, sample open, task drawer, palette, close/reopen, and recent-project reopen.
