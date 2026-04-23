@@ -131,6 +131,25 @@ def test_chevron_expands_inline_tasks(page: Page) -> None:
     log(f"chevron toggles inline tasks for {fid!r}")
 
 
+def test_inline_task_delete_affordance_stays_visible_on_narrow_screens(page: Page) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    goto_view(page, "scope")
+    row = page.locator('[data-testid="view-scope"] [data-feature-id]').first
+    row.locator('button[aria-label="Expand tasks"]').click()
+    delete_btn = row.locator('[aria-label^="Delete task "]').first
+    opacity = float(delete_btn.evaluate("el => getComputedStyle(el).opacity"))
+    focused = delete_btn.evaluate(
+        """el => {
+            el.focus()
+            return document.activeElement === el
+        }"""
+    )
+    assert opacity >= 0.69, f"expected visible inline delete affordance on narrow screens, got {opacity}"
+    assert focused is True, "expected inline delete affordance to be keyboard focusable"
+    page.set_viewport_size({"width": 1280, "height": 900})
+    log("inline scope-task delete affordance stays visible on narrow screens")
+
+
 def test_right_click_feature_opens_context_menu(page: Page) -> None:
     goto_view(page, "scope")
     row = page.locator('[data-testid="view-scope"] [data-feature-id]').first
@@ -148,6 +167,7 @@ TESTS = [
     test_totals_update_after_mutation,
     test_feature_row_click_opens_drawer,
     test_chevron_expands_inline_tasks,
+    test_inline_task_delete_affordance_stays_visible_on_narrow_screens,
     test_right_click_feature_opens_context_menu,
 ]
 

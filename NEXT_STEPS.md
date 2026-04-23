@@ -18,6 +18,7 @@ This file tracks the next product and QA work after the current UX stabilization
 - Blocked global view/palette shortcuts while the task drawer or other modal editors are open.
 - Fixed the task drawer layout on narrow screens so sections stack and footer controls stay visible.
 - Fixed task/dependency delete affordances in the task drawer so they stay visible on narrow screens and no longer depend on hover alone.
+- Fixed the Scope view's inline task delete affordance so it no longer disappears completely on narrow screens.
 - Improved Welcome-screen affordances: the primary open-project action is keyboard reachable, and recent-entry removal stays visible on narrow screens.
 - Final AppImage artifact spot-check completed on the current branch build.
 - AppImage QA pass covered fresh launch, Welcome focus order, sample open, task drawer, palette, close/reopen, and recent-project reopen.

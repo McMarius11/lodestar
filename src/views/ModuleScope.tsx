@@ -515,9 +515,11 @@ function TaskRow({
         </span>
       )}
       <button
+        type="button"
         onClick={() => deleteTask(featureId, task.id)}
-        className="label-mono text-fg-subtle opacity-0 group-hover:opacity-100 hover:text-danger"
-        title="Delete task"
+        aria-label={`Delete task ${task.label}`}
+        className="label-mono text-fg-subtle opacity-70 transition-opacity hover:opacity-100 hover:text-danger"
+        title={`Delete task ${task.label}`}
       >
         DEL
       </button>
