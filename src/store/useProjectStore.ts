@@ -18,16 +18,15 @@ import { featureStatus, findFeature, moduleOf } from '@/lib/deps'
 import {
   loadRecents,
   saveRecents,
-  upsertRecent,
   removeRecent,
   type Recent,
 } from '@/lib/recentFiles'
 import {
   clearLastSession,
   loadLastSession,
-  saveLastSession,
   type LastSession,
 } from '@/lib/lastSession'
+import { markDefaultSlotOpened, rememberOpened } from '@/lib/sessionTracking'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
@@ -174,41 +173,6 @@ function clearPendingSaveTimer(): void {
   if (!saveTimer) return
   clearTimeout(saveTimer)
   saveTimer = null
-}
-
-function basenameOf(p: string): string {
-  const parts = p.split(/[/\\]/)
-  return parts[parts.length - 1] || p
-}
-
-/**
- * A project at `path` just became active. Update the recent-files list and
- * the last-session pointer so the Welcome screen can offer "Continue" next
- * boot. Called by every action that opens a named file.
- */
-function rememberOpened(path: string): void {
-  const now = Date.now()
-  saveLastSession({ path, when: now })
-  saveRecents(
-    upsertRecent(loadRecents(), {
-      name: basenameOf(path),
-      path,
-      when: now,
-    }),
-  )
-}
-
-/**
- * Browser-mode / pathless opens: the project lives in the default slot.
- * Still worth leaving a breadcrumb so the Welcome screen can offer Continue
- * on the next visit, and the recent-files list gets a named entry.
- */
-function markDefaultSlotOpened(name?: string): void {
-  const now = Date.now()
-  saveLastSession({ path: null, when: now })
-  if (name) {
-    saveRecents(upsertRecent(loadRecents(), { name, when: now }))
-  }
 }
 
 export const useProjectStore = create<State & Actions>()(
@@ -518,19 +482,29 @@ export const useProjectStore = create<State & Actions>()(
     },
 
     addTask: (featureId, label) => {
+      const trimmed = label.trim()
+      if (!trimmed) return
       commit((s) => {
         const f = findFeature(s.project, featureId)
         if (!f) return
-        f.tasks.push({ id: newId('t'), label, done: false })
+        f.tasks.push({ id: newId('t'), label: trimmed, done: false })
       })
     },
 
     updateTask: (featureId, taskId, patch) => {
+      // Reject whitespace-only label renames; trim any padded label so the
+      // store stays the single source of truth even if a caller forgets to.
+      const normalized: Partial<Task> = { ...patch }
+      if (normalized.label !== undefined) {
+        const trimmed = normalized.label.trim()
+        if (!trimmed) return
+        normalized.label = trimmed
+      }
       commit((s) => {
         const f = findFeature(s.project, featureId)
         if (!f) return
         const t = f.tasks.find((x) => x.id === taskId)
-        if (t) Object.assign(t, patch)
+        if (t) Object.assign(t, normalized)
       })
     },
 
@@ -710,7 +684,7 @@ export const useProjectStore = create<State & Actions>()(
           return ar - br
         })
       }
-      set((s) => {
+      commit((s) => {
         for (const key of Object.keys(byStatus)) {
           byStatus[key].forEach((ref, i) => {
             const f = findFeature(s.project, ref.id)
@@ -718,7 +692,6 @@ export const useProjectStore = create<State & Actions>()(
           })
         }
       })
-      get()._persist()
     },
 
     updateFeature: (featureId, patch) => {

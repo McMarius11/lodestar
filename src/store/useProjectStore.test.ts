@@ -365,3 +365,125 @@ describe('useProjectStore project-open session resets', () => {
     expect(store.getState().project.meta.name).toBe('Fresh Start')
   })
 })
+
+describe('useProjectStore task label hygiene', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    externalChangeHandler = null
+    saveProjectMock.mockReset().mockResolvedValue(undefined)
+    subscribeExternalChangeMock.mockReset().mockImplementation((cb: () => Promise<void> | void) => {
+      externalChangeHandler = cb
+      return () => {}
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function seededStore(): Promise<{
+    store: Awaited<ReturnType<typeof freshStore>>
+    featureId: string
+  }> {
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+    })
+    const featureId = store.getState().addFeature('core', { label: 'Task Host' })
+    return { store, featureId }
+  }
+
+  it('addTask ignores whitespace-only labels', async () => {
+    const { store, featureId } = await seededStore()
+    store.getState().addTask(featureId, '   ')
+    const tasks = store.getState().project.modules[0].features.find((f) => f.id === featureId)?.tasks
+    expect(tasks).toHaveLength(0)
+  })
+
+  it('addTask trims padded labels before persisting', async () => {
+    const { store, featureId } = await seededStore()
+    store.getState().addTask(featureId, '  ship it  ')
+    const tasks = store.getState().project.modules[0].features.find((f) => f.id === featureId)?.tasks
+    expect(tasks).toHaveLength(1)
+    expect(tasks?.[0].label).toBe('ship it')
+  })
+
+  it('updateTask trims padded labels and rejects whitespace-only renames', async () => {
+    const { store, featureId } = await seededStore()
+    store.getState().addTask(featureId, 'original')
+    const feat = store.getState().project.modules[0].features.find((f) => f.id === featureId)
+    const taskId = feat!.tasks[0].id
+
+    store.getState().updateTask(featureId, taskId, { label: '   ' })
+    expect(
+      store.getState().project.modules[0].features.find((f) => f.id === featureId)?.tasks[0].label,
+    ).toBe('original')
+
+    store.getState().updateTask(featureId, taskId, { label: '  renamed  ' })
+    expect(
+      store.getState().project.modules[0].features.find((f) => f.id === featureId)?.tasks[0].label,
+    ).toBe('renamed')
+  })
+})
+
+describe('useProjectStore kanban rank normalization', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    externalChangeHandler = null
+    saveProjectMock.mockReset().mockResolvedValue(undefined)
+    subscribeExternalChangeMock.mockReset().mockImplementation((cb: () => Promise<void> | void) => {
+      externalChangeHandler = cb
+      return () => {}
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('participates in undo — normalize pushes a history frame and undo restores prior ranks', async () => {
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+    })
+
+    const a = store.getState().addFeature('core', { label: 'A' })
+    const b = store.getState().addFeature('core', { label: 'B' })
+    store.getState().setKanbanRank(a, 1.5)
+    store.getState().setKanbanRank(b, 1.75)
+
+    const before = store
+      .getState()
+      .project.modules[0].features.filter((f) => f.id === a || f.id === b)
+      .map((f) => ({ id: f.id, rank: f.rank }))
+
+    store.getState().normalizeKanbanRanks()
+
+    const afterNormalize = store
+      .getState()
+      .project.modules[0].features.filter((f) => f.id === a || f.id === b)
+      .map((f) => ({ id: f.id, rank: f.rank }))
+    expect(afterNormalize).not.toEqual(before)
+    expect(afterNormalize.every((f) => Number.isInteger(f.rank))).toBe(true)
+
+    store.getState().undo()
+
+    const afterUndo = store
+      .getState()
+      .project.modules[0].features.filter((f) => f.id === a || f.id === b)
+      .map((f) => ({ id: f.id, rank: f.rank }))
+    expect(afterUndo).toEqual(before)
+  })
+})
