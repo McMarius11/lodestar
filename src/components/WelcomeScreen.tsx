@@ -35,6 +35,7 @@ export function WelcomeScreen() {
   const [name, setName] = useState('')
   const [recents, setRecents] = useState<Recent[]>([])
   const [last, setLast] = useState<LastSession | null>(null)
+  const hasProjectApi = typeof window !== 'undefined' && Boolean(window.projectAPI)
 
   const refreshLists = useCallback(() => {
     setRecents(recentsFn())
@@ -56,6 +57,7 @@ export function WelcomeScreen() {
     return recents[0]?.name ?? 'your last project'
   }, [last, recents])
   const hasRecentProjects = recents.length > 0
+  const hasDesktopOnlyRecents = recents.some((r) => r.path && !hasProjectApi)
 
   const onContinue = useCallback(async () => {
     setError(null)
@@ -270,50 +272,59 @@ export function WelcomeScreen() {
             <div className="label-mono mb-2 text-fg-subtle">RECENT</div>
             <div className="space-y-1">
               {recents.map((r) => {
-                const clickable = r.path
-                  ? Boolean(typeof window !== 'undefined' && window.projectAPI)
-                  : true
+                const clickable = r.path ? hasProjectApi : true
                 const key = (r.path ?? r.name) + r.when
-                if (clickable) {
-                  return (
-                    <div
-                      key={key}
-                      className="flex items-center hover:bg-raised/60 focus-within:bg-raised/60 label-mono transition-colors group"
-                      title={r.path}
+                return (
+                  <div
+                    key={key}
+                    className={[
+                      'flex items-center label-mono transition-colors group',
+                      clickable
+                        ? 'hover:bg-raised/60 focus-within:bg-raised/60'
+                        : 'bg-raised/20',
+                    ].join(' ')}
+                    title={r.path}
+                  >
+                    <button
+                      onClick={() => clickable && onReopenRecent(r)}
+                      disabled={!clickable}
+                      className={[
+                        'flex-1 flex items-center justify-between py-1.5 px-2 text-left min-w-0',
+                        clickable ? '' : 'cursor-not-allowed opacity-70',
+                      ].join(' ')}
                     >
-                      <button
-                        onClick={() => onReopenRecent(r)}
-                        className="flex-1 flex items-center justify-between py-1.5 px-2 text-left"
-                      >
-                        <span className="min-w-0">
-                          <span className="num-mono text-fg group-hover:text-accent truncate block">
-                            {r.name}
-                          </span>
-                          {!r.path && (
-                            <span className="label-mono text-fg-subtle block mt-0.5">
-                              DEFAULT SLOT
-                            </span>
-                          )}
+                      <span className="min-w-0">
+                        <span
+                          className={[
+                            'num-mono truncate block',
+                            clickable ? 'text-fg group-hover:text-accent' : 'text-fg-muted',
+                          ].join(' ')}
+                        >
+                          {r.name}
                         </span>
-                        <span className="text-fg-subtle shrink-0 ml-4">
-                          {formatWhen(r.when)}
+                        <span className="label-mono text-fg-subtle block mt-0.5">
+                          {r.path ? (clickable ? r.path : 'DESKTOP APP REQUIRED') : 'DEFAULT SLOT'}
                         </span>
-                      </button>
-                      <button
-                        onClick={(e) => onForgetRecent(r, e)}
-                        aria-label={`Remove ${r.name} from recents`}
-                        className="px-2 py-1.5 text-fg-subtle hover:text-danger opacity-100 focus:opacity-100 group-focus-within:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )
-                }
-                return null
+                      </span>
+                      <span className="text-fg-subtle shrink-0 ml-4">
+                        {formatWhen(r.when)}
+                      </span>
+                    </button>
+                    <button
+                      onClick={(e) => onForgetRecent(r, e)}
+                      aria-label={`Remove ${r.name} from recents`}
+                      className="px-2 py-1.5 text-fg-subtle hover:text-danger opacity-100 focus:opacity-100 group-focus-within:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )
               })}
             </div>
             <p className="label-mono text-fg-subtle mt-2">
-              Click to re-open · × removes the entry
+              {hasDesktopOnlyRecents
+                ? 'Desktop-only recents stay visible here · × removes the entry'
+                : 'Click to re-open · × removes the entry'}
             </p>
           </div>
         )}

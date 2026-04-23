@@ -145,8 +145,29 @@ def test_recent_without_last_session_uses_returning_copy(page: Page) -> None:
     log("recent-only Welcome state uses returning-user copy instead of empty-state copy")
 
 
+def test_file_based_recent_stays_visible_in_browser_mode(page: Page) -> None:
+    recent = [{"name": "Disk Project", "path": "/tmp/disk-project.json", "when": 123}]
+    page.evaluate(
+        """([recents, recentsKey, lastKey, lsKey]) => {
+            localStorage.removeItem(lsKey)
+            localStorage.removeItem(lastKey)
+            localStorage.setItem(recentsKey, JSON.stringify(recents))
+        }""",
+        [recent, RECENTS_KEY, LAST_SESSION_KEY, LS_KEY],
+    )
+    page.reload(wait_until="networkidle")
+
+    row = page.locator("button", has_text="Disk Project").first
+    row.wait_for()
+    assert row.is_disabled()
+    assert page.locator("text=DESKTOP APP REQUIRED").count() == 1
+    assert page.locator("text=Desktop-only recents stay visible here").count() == 1
+    log("file-based recent stays visible and is marked desktop-only in browser mode")
+
+
 TESTS_RECENTS_COPY = [
     test_recent_without_last_session_uses_returning_copy,
+    test_file_based_recent_stays_visible_in_browser_mode,
 ]
 
 
