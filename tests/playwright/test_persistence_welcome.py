@@ -46,8 +46,16 @@ def test_try_nimbus_loads_sample(page: Page) -> None:
     log("Try-Nimbus button loads the 6-module sample")
 
 
+def test_open_project_primary_action_is_keyboard_reachable(page: Page) -> None:
+    page.keyboard.press("Tab")
+    active = page.evaluate("document.activeElement?.getAttribute('data-testid')")
+    assert active == "welcome-open-project", active
+    log("welcome open-project primary action is keyboard reachable")
+
+
 TESTS_EMPTY = [
     test_welcome_appears_with_empty_storage,
+    test_open_project_primary_action_is_keyboard_reachable,
     test_try_nimbus_loads_sample,
 ]
 
@@ -89,8 +97,30 @@ def test_default_slot_recent_can_be_removed_and_reopened(page: Page) -> None:
     log("default-slot recent can be removed and reopened from Welcome")
 
 
+def test_recent_remove_affordance_stays_visible_on_narrow_screens(page: Page) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    seed = json.loads(SEED_PATH.read_text())
+    recent = [{"name": "Nimbus local slot", "when": 123}]
+    last = {"path": None, "when": 123}
+    page.evaluate(
+        """([project, last, recents, lsKey, lastKey, recentsKey]) => {
+            localStorage.setItem(lsKey, JSON.stringify(project))
+            localStorage.setItem(lastKey, JSON.stringify(last))
+            localStorage.setItem(recentsKey, JSON.stringify(recents))
+        }""",
+        [seed, last, recent, LS_KEY, LAST_SESSION_KEY, RECENTS_KEY],
+    )
+    page.reload(wait_until="networkidle")
+
+    remove = page.locator('[aria-label="Remove Nimbus local slot from recents"]')
+    opacity = remove.evaluate("el => getComputedStyle(el).opacity")
+    assert opacity == "1", opacity
+    log("recent remove affordance stays visible on narrow screens")
+
+
 TESTS_RECENTS = [
     test_default_slot_recent_can_be_removed_and_reopened,
+    test_recent_remove_affordance_stays_visible_on_narrow_screens,
 ]
 
 

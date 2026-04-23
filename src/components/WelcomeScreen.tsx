@@ -189,7 +189,8 @@ export function WelcomeScreen() {
           </motion.button>
         )}
 
-        <motion.div
+        <motion.button
+          type="button"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
@@ -200,12 +201,14 @@ export function WelcomeScreen() {
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           className={[
-            'relative border border-dashed p-6 mb-6 cursor-pointer transition-colors',
+            'relative w-full border border-dashed p-6 mb-6 cursor-pointer text-left transition-colors',
             dragging
               ? 'border-accent bg-accent/5'
-              : 'border-line/60 hover:border-line-strong/80',
+              : 'border-line/60 hover:border-line-strong/80 focus-visible:border-accent focus-visible:bg-accent/5',
           ].join(' ')}
           onClick={onBrowse}
+          aria-label="Open a project.json"
+          data-testid="welcome-open-project"
         >
           <div className="flex items-center gap-4">
             <div className="text-3xl ser-display text-accent">↓</div>
@@ -218,7 +221,7 @@ export function WelcomeScreen() {
               </div>
             </div>
           </div>
-        </motion.div>
+        </motion.button>
 
         {error && (
           <div className="mb-6 border border-danger/40 bg-danger/5 px-4 py-2 text-sm text-danger">
@@ -275,7 +278,7 @@ export function WelcomeScreen() {
                   return (
                     <div
                       key={key}
-                      className="flex items-center hover:bg-raised/60 label-mono transition-colors group"
+                      className="flex items-center hover:bg-raised/60 focus-within:bg-raised/60 label-mono transition-colors group"
                       title={r.path}
                     >
                       <button
@@ -299,7 +302,7 @@ export function WelcomeScreen() {
                       <button
                         onClick={(e) => onForgetRecent(r, e)}
                         aria-label={`Remove ${r.name} from recents`}
-                        className="px-2 py-1.5 text-fg-subtle hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="px-2 py-1.5 text-fg-subtle hover:text-danger opacity-100 focus:opacity-100 group-focus-within:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                       >
                         ×
                       </button>
