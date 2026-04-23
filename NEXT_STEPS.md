@@ -28,6 +28,7 @@ This file tracks the next product and QA work after the current UX stabilization
 - Reworded Validation categories and findings so the panel reads like guidance instead of internal error codes.
 - Kept file-based recent projects visible on the Welcome screen in browser mode, with a clear desktop-only label instead of rendering an empty recent section.
 - External file changes now stay blocked behind the conflict banner while modal editors are open, not just while the drawer or command palette is active.
+- The external-change banner now wraps and stacks cleanly on narrow screens instead of forcing the warning text and actions into one brittle row.
 - Improved Welcome-screen affordances: the primary open-project action is keyboard reachable, and recent-entry removal stays visible on narrow screens.
 - Final AppImage artifact spot-check completed on the current branch build.
 - AppImage QA pass covered fresh launch, Welcome focus order, sample open, task drawer, palette, close/reopen, and recent-project reopen.

@@ -31,6 +31,12 @@ import {
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict'
 
+declare global {
+  interface Window {
+    __lodestarStore?: typeof useProjectStore
+  }
+}
+
 export type StatusFilter = 'all' | 'ready' | 'blocked' | 'conflict'
 
 type State = {
@@ -989,6 +995,10 @@ export const useProjectStore = create<State & Actions>()(
     }
   }),
 )
+
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  window.__lodestarStore = useProjectStore
+}
 
 function isInputFocused(): boolean {
   if (typeof document === 'undefined') return false
