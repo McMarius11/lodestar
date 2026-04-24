@@ -37,14 +37,44 @@ export function ModuleEditor({
 }) {
   const updateModule = useProjectStore((s) => s.updateModule)
   const deleteModule = useProjectStore((s) => s.deleteModule)
+  const renameModuleId = useProjectStore((s) => s.renameModuleId)
   const [label, setLabel] = useState(module.label)
   const [color, setColor] = useState(module.color)
+  const [idDraft, setIdDraft] = useState(module.id)
+  const [idEditing, setIdEditing] = useState(false)
+  const [idError, setIdError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setLabel(module.label)
     setColor(module.color)
+    setIdDraft(module.id)
+    setIdEditing(false)
+    setIdError(null)
   }, [module.id, module.label, module.color])
+
+  const commitIdRename = () => {
+    const next = idDraft.trim()
+    if (!next || next === module.id) {
+      setIdEditing(false)
+      setIdError(null)
+      setIdDraft(module.id)
+      return
+    }
+    const res = renameModuleId(module.id, next)
+    if (res.ok) {
+      setIdEditing(false)
+      setIdError(null)
+      return
+    }
+    setIdError(
+      res.reason === 'duplicate'
+        ? 'id already in use'
+        : res.reason === 'empty'
+        ? 'cannot be empty'
+        : 'invalid id',
+    )
+  }
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -96,7 +126,59 @@ export function ModuleEditor({
         data-module-id={module.id}
       >
         <div className="px-4 pt-4 pb-3 border-b border-line/60">
-          <div className="label-mono mb-2">MODULE · {module.id}</div>
+          <div className="label-mono mb-2 flex items-center gap-2">
+            <span className="text-fg-subtle">MODULE ·</span>
+            {idEditing ? (
+              <input
+                autoFocus
+                value={idDraft}
+                onChange={(e) => {
+                  setIdDraft(e.target.value)
+                  if (idError) setIdError(null)
+                }}
+                onBlur={commitIdRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    e.currentTarget.blur()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setIdDraft(module.id)
+                    setIdError(null)
+                    setIdEditing(false)
+                  }
+                }}
+                data-testid="module-editor-id-input"
+                aria-label="Module id"
+                className={clsx(
+                  'num-mono bg-sunken/40 outline-none px-1.5 border text-fg w-40',
+                  idError ? 'border-danger' : 'border-line/60 focus:border-accent',
+                )}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setIdDraft(module.id)
+                  setIdError(null)
+                  setIdEditing(true)
+                }}
+                data-testid="module-editor-id"
+                title="Click to rename id"
+                className="num-mono hover:text-accent hover:underline decoration-dotted underline-offset-2 transition-colors"
+              >
+                {module.id}
+              </button>
+            )}
+            {idError && (
+              <span
+                className="label-mono text-danger"
+                data-testid="module-editor-id-error"
+              >
+                {idError}
+              </span>
+            )}
+          </div>
           <input
             id="mod-editor-title"
             autoFocus
@@ -117,7 +199,10 @@ export function ModuleEditor({
 
         <div className="px-4 py-3 border-b border-line/60">
           <div className="label-mono mb-2">COLOR</div>
-          <div className="grid grid-cols-7 gap-1.5">
+          <div
+            className="grid grid-cols-7 gap-1.5"
+            data-testid="module-color-presets"
+          >
             {PRESETS.map((c) => (
               <button
                 key={c}

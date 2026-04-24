@@ -34,6 +34,23 @@ export function findFeature(project: Project, featureId: string): Feature | null
   return null
 }
 
+/**
+ * Count how many other features point at `featureId` via `deps[*].id`.
+ * Used by the rename UI to warn "renaming will update N dependencies".
+ */
+export function countIncomingDeps(project: Project, featureId: string): number {
+  let n = 0
+  for (const m of project.modules) {
+    for (const f of m.features) {
+      if (f.id === featureId) continue
+      for (const d of f.deps) {
+        if (d.id === featureId) n++
+      }
+    }
+  }
+  return n
+}
+
 export function moduleOf(project: Project, featureId: string): string | null {
   for (const m of project.modules) {
     if (m.features.some((f) => f.id === featureId)) return m.id

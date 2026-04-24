@@ -487,3 +487,257 @@ describe('useProjectStore kanban rank normalization', () => {
     expect(afterUndo).toEqual(before)
   })
 })
+
+describe('useProjectStore renameFeatureId', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    externalChangeHandler = null
+    saveProjectMock.mockReset().mockResolvedValue(undefined)
+    subscribeExternalChangeMock.mockReset().mockImplementation((cb: () => Promise<void> | void) => {
+      externalChangeHandler = cb
+      return () => {}
+    })
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function seeded() {
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+    })
+    const a = store.getState().addFeature('core', { label: 'Alpha' })
+    const b = store.getState().addFeature('core', { label: 'Beta' })
+    const c = store.getState().addFeature('core', { label: 'Gamma' })
+    store.getState().addDep(b, { id: a, reason: 'needs', type: 'build' })
+    store.getState().addDep(c, { id: a, reason: 'needs', type: 'runtime' })
+    return { store, a, b, c }
+  }
+
+  it('rejects empty or whitespace-only ids', async () => {
+    const { store, a } = await seeded()
+    expect(store.getState().renameFeatureId(a, '')).toEqual({ ok: false, reason: 'empty' })
+    expect(store.getState().renameFeatureId(a, '   ')).toEqual({ ok: false, reason: 'empty' })
+    expect(store.getState().project.modules[0].features.find((f) => f.id === a)).toBeTruthy()
+  })
+
+  it('is a no-op when the new id matches the old one', async () => {
+    const { store, a } = await seeded()
+    const before = JSON.parse(JSON.stringify(store.getState().project))
+    expect(store.getState().renameFeatureId(a, a)).toEqual({ ok: true })
+    expect(store.getState().project).toEqual(before)
+  })
+
+  it('rejects ids already used by another feature', async () => {
+    const { store, a, b } = await seeded()
+    expect(store.getState().renameFeatureId(a, b)).toEqual({ ok: false, reason: 'duplicate' })
+    expect(store.getState().project.modules[0].features.find((f) => f.id === a)).toBeTruthy()
+  })
+
+  it('rejects unknown source ids', async () => {
+    const { store } = await seeded()
+    expect(store.getState().renameFeatureId('ghost', 'whatever')).toEqual({
+      ok: false,
+      reason: 'not-found',
+    })
+  })
+
+  it('renames the feature and cascades to every incoming dep', async () => {
+    const { store, a, b, c } = await seeded()
+    const res = store.getState().renameFeatureId(a, 'alpha-v2')
+    expect(res).toEqual({ ok: true })
+    const feats = store.getState().project.modules[0].features
+    expect(feats.find((f) => f.id === 'alpha-v2')).toBeTruthy()
+    expect(feats.find((f) => f.id === a)).toBeUndefined()
+    const bf = feats.find((f) => f.id === b)!
+    const cf = feats.find((f) => f.id === c)!
+    expect(bf.deps.map((d) => d.id)).toEqual(['alpha-v2'])
+    expect(cf.deps.map((d) => d.id)).toEqual(['alpha-v2'])
+  })
+
+  it('keeps the drawer+cursor anchored on the renamed feature', async () => {
+    const { store, a } = await seeded()
+    store.getState().openDrawer(a)
+    store.getState().setCursorFeature(a)
+    store.getState().renameFeatureId(a, 'alpha-v2')
+    expect(store.getState().drawerFeatureId).toBe('alpha-v2')
+    expect(store.getState().cursorFeatureId).toBe('alpha-v2')
+  })
+
+  it('migrates meta.mindmapPositions + volatile mindmap overrides', async () => {
+    const { store, a } = await seeded()
+    store.setState((s) => {
+      s.project.meta.mindmapPositions = { [a]: { x: 10, y: 20 } }
+      s.mindmapOverrides[a] = { x: 30, y: 40 }
+    })
+    store.getState().renameFeatureId(a, 'alpha-v2')
+    expect(store.getState().project.meta.mindmapPositions).toEqual({
+      'alpha-v2': { x: 10, y: 20 },
+    })
+    expect(store.getState().mindmapOverrides).toEqual({
+      'alpha-v2': { x: 30, y: 40 },
+    })
+  })
+
+  it('is undoable as a single history frame', async () => {
+    const { store, a, b } = await seeded()
+    const historyBefore = store.getState().history.length
+    store.getState().renameFeatureId(a, 'alpha-v2')
+    expect(store.getState().history.length).toBe(historyBefore + 1)
+    store.getState().undo()
+    const feats = store.getState().project.modules[0].features
+    expect(feats.find((f) => f.id === a)).toBeTruthy()
+    const bf = feats.find((f) => f.id === b)!
+    expect(bf.deps.map((d) => d.id)).toEqual([a])
+  })
+})
+
+describe('useProjectStore renameModuleId', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    saveProjectMock.mockReset().mockResolvedValue(undefined)
+    subscribeExternalChangeMock.mockReset().mockImplementation(() => () => {})
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function seeded() {
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+    })
+    store.getState().addModule({ label: 'Storage' })
+    return store
+  }
+
+  it('rejects duplicate, empty and unknown ids', async () => {
+    const store = await seeded()
+    const existing = store.getState().project.modules.map((m) => m.id)
+    expect(existing).toContain('core')
+    expect(store.getState().renameModuleId('core', '')).toEqual({ ok: false, reason: 'empty' })
+    expect(store.getState().renameModuleId('core', existing[1])).toEqual({
+      ok: false,
+      reason: 'duplicate',
+    })
+    expect(store.getState().renameModuleId('ghost', 'whatever')).toEqual({
+      ok: false,
+      reason: 'not-found',
+    })
+  })
+
+  it('renames the module id and is undoable', async () => {
+    const store = await seeded()
+    const historyBefore = store.getState().history.length
+    const res = store.getState().renameModuleId('core', 'platform')
+    expect(res).toEqual({ ok: true })
+    expect(store.getState().project.modules.map((m) => m.id)).toContain('platform')
+    expect(store.getState().history.length).toBe(historyBefore + 1)
+    store.getState().undo()
+    expect(store.getState().project.modules.map((m) => m.id)).toContain('core')
+  })
+})
+
+describe('useProjectStore reorderTaskInFeature', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    saveProjectMock.mockReset().mockResolvedValue(undefined)
+    subscribeExternalChangeMock.mockReset().mockImplementation(() => () => {})
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function seeded() {
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+    })
+    const fid = store.getState().addFeature('core', { label: 'Alpha' })
+    store.getState().addTask(fid, 'one')
+    store.getState().addTask(fid, 'two')
+    store.getState().addTask(fid, 'three')
+    return { store, fid }
+  }
+
+  it('moves a task within its feature and persists through undo', async () => {
+    const { store, fid } = await seeded()
+    const tasks = store
+      .getState()
+      .project.modules[0].features.find((f) => f.id === fid)!.tasks
+    const thirdId = tasks[2].id
+    store.getState().reorderTaskInFeature(fid, thirdId, 0)
+    const labelsNow = store
+      .getState()
+      .project.modules[0].features.find((f) => f.id === fid)!
+      .tasks.map((t) => t.label)
+    expect(labelsNow).toEqual(['three', 'one', 'two'])
+    store.getState().undo()
+    const labelsAfterUndo = store
+      .getState()
+      .project.modules[0].features.find((f) => f.id === fid)!
+      .tasks.map((t) => t.label)
+    expect(labelsAfterUndo).toEqual(['one', 'two', 'three'])
+  })
+
+  it('clamps out-of-range target indices to the valid window', async () => {
+    const { store, fid } = await seeded()
+    const firstId = store
+      .getState()
+      .project.modules[0].features.find((f) => f.id === fid)!.tasks[0].id
+    store.getState().reorderTaskInFeature(fid, firstId, 999)
+    const labels = store
+      .getState()
+      .project.modules[0].features.find((f) => f.id === fid)!
+      .tasks.map((t) => t.label)
+    expect(labels).toEqual(['two', 'three', 'one'])
+  })
+
+  it('is a silent no-op for unknown feature or task ids', async () => {
+    const { store, fid } = await seeded()
+    const before = JSON.parse(JSON.stringify(store.getState().project))
+    store.getState().reorderTaskInFeature('ghost-feat', 'x', 0)
+    store.getState().reorderTaskInFeature(fid, 'ghost-task', 0)
+    expect(store.getState().project).toEqual(before)
+  })
+})
+
+describe('useProjectStore clearFilters', () => {
+  beforeEach(() => {
+    saveProjectMock.mockReset().mockResolvedValue(undefined)
+    subscribeExternalChangeMock.mockReset().mockImplementation(() => () => {})
+  })
+
+  it('resets both activeStatus and activeMilestone without pushing undo history', async () => {
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+      activeStatus: 'blocked',
+      activeMilestone: 'v0.1',
+    })
+    const historyBefore = store.getState().history.length
+    store.getState().clearFilters()
+    expect(store.getState().activeStatus).toBe('all')
+    expect(store.getState().activeMilestone).toBe('all')
+    expect(store.getState().history.length).toBe(historyBefore)
+  })
+})

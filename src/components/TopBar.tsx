@@ -120,6 +120,7 @@ export function TopBar() {
   const filtersActive = useProjectStore(
     (s) => s.activeStatus !== 'all' || s.activeMilestone !== 'all',
   )
+  const clearFilters = useProjectStore((s) => s.clearFilters)
 
   return (
     <header className="relative z-20 border-b border-line/60 bg-void/80 backdrop-blur-sm">
@@ -305,6 +306,17 @@ export function TopBar() {
         >
           {filtersActive ? '● FILTER' : 'FILTER'}
         </span>
+        {filtersActive && (
+          <button
+            onClick={clearFilters}
+            title="Clear all filters"
+            aria-label="Clear all filters"
+            data-testid="btn-clear-filters"
+            className="label-mono text-fg-subtle hover:text-fg transition-colors px-1 shrink-0"
+          >
+            ×
+          </button>
+        )}
         <StatusFilter />
         <MilestoneFilter />
       </div>

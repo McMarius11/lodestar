@@ -150,7 +150,8 @@ def test_preset_color_click(page: Page) -> None:
     picked = page.evaluate(
         """(curColor) => {
             const dlg = document.querySelector('[data-testid="dialog-module"]');
-            const btns = Array.from(dlg.querySelectorAll('.grid button'));
+            const grid = dlg.querySelector('[data-testid="module-color-presets"]');
+            const btns = Array.from(grid.querySelectorAll('button'));
             const other = btns.find(b => (b.getAttribute('title') || '').toLowerCase() !== curColor.toLowerCase());
             other.click();
             return other.getAttribute('title');
@@ -261,6 +262,47 @@ def test_delete_module_with_confirm(page: Page) -> None:
     log(f"module {target!r} deleted after confirm")
 
 
+def test_rename_module_id(page: Page) -> None:
+    mid = _first_module_id(page)
+    _open_editor_via_swatch(page, mid)
+    page.get_by_test_id("module-editor-id").click()
+    inp = page.get_by_test_id("module-editor-id-input")
+    new_id = f"{mid}-renamed"
+    inp.fill(new_id)
+    inp.press("Enter")
+    wait_idle(page)
+    proj = get_project(page)
+    assert any(m["id"] == new_id for m in proj["modules"]), (
+        f"expected module id {new_id!r}, got {[m['id'] for m in proj['modules']]}"
+    )
+    _close_module_editor(page)
+    # undo to restore original id for later tests
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    restored = get_project(page)
+    assert any(m["id"] == mid for m in restored["modules"])
+    log(f"module id rename {mid!r} → {new_id!r} → undone")
+
+
+def test_rename_module_id_rejects_duplicate(page: Page) -> None:
+    mids = page.locator("[data-module-id]").evaluate_all(
+        "els => els.map(e => e.getAttribute('data-module-id'))"
+    )
+    assert len(mids) >= 2, "need ≥2 modules for duplicate test"
+    target, existing = mids[0], mids[1]
+    _open_editor_via_swatch(page, target)
+    page.get_by_test_id("module-editor-id").click()
+    inp = page.get_by_test_id("module-editor-id-input")
+    inp.fill(existing)
+    inp.press("Enter")
+    page.wait_for_selector('[data-testid="module-editor-id-error"]')
+    proj = get_project(page)
+    assert any(m["id"] == target for m in proj["modules"]), "target id must survive duplicate rename"
+    page.keyboard.press("Escape")
+    _close_module_editor(page)
+    log(f"duplicate module id {existing!r} refused for rename of {target!r}")
+
+
 TESTS = [
     test_opens_via_color_swatch,
     test_opens_via_title_button,
@@ -273,6 +315,8 @@ TESTS = [
     test_esc_closes,
     test_outside_click_closes,
     test_delete_module_with_confirm,
+    test_rename_module_id,
+    test_rename_module_id_rejects_duplicate,
 ]
 
 
