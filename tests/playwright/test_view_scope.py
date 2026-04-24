@@ -212,6 +212,59 @@ def test_right_click_feature_opens_context_menu(page: Page) -> None:
     log("right-click on feature opens context menu")
 
 
+def test_filter_hides_modules_with_zero_matching_features(page: Page) -> None:
+    """With a non-default filter active, modules whose features all get
+    filtered out must drop out of the layout — empty headers are pure noise.
+    With no filter active, every module stays so the user can still + NEW
+    into an empty one."""
+    goto_view(page, "scope")
+    page.get_by_test_id("filter-status-all").click()
+    page.get_by_test_id("filter-ms-all").click()
+    page.wait_for_timeout(120)
+    all_modules_in_dom = lambda: page.locator(
+        '[data-testid="view-scope"] [data-module-id]'
+    ).count()
+    project = get_project(page)
+    total_modules = len(project["modules"])
+    assert all_modules_in_dom() == total_modules, (
+        f"with no filter, expected all {total_modules} modules visible, "
+        f"got {all_modules_in_dom()}"
+    )
+
+    # Pick a milestone that doesn't include every module.
+    ms_with_partial_coverage = None
+    for ms in project["meta"]["milestones"]:
+        coverage = sum(
+            1
+            for m in project["modules"]
+            if any(f["ms"] == ms["id"] for f in m["features"])
+        )
+        if 0 < coverage < total_modules:
+            ms_with_partial_coverage = ms["id"]
+            expected_visible = coverage
+            break
+    if ms_with_partial_coverage is None:
+        log("seed has no milestone with partial module coverage; skipping")
+        return
+
+    page.get_by_test_id(f"filter-ms-{ms_with_partial_coverage}").click()
+    page.wait_for_timeout(120)
+    visible = all_modules_in_dom()
+    assert visible == expected_visible, (
+        f"with MS={ms_with_partial_coverage} filter, expected "
+        f"{expected_visible} modules with matching features, got {visible}"
+    )
+
+    # Reset and confirm everything comes back
+    page.get_by_test_id("filter-ms-all").click()
+    page.wait_for_timeout(120)
+    assert all_modules_in_dom() == total_modules, "filter reset did not restore modules"
+    log(
+        f"MS filter hides modules with zero matches: "
+        f"all={total_modules}, {ms_with_partial_coverage}={visible}"
+    )
+
+
 TESTS = [
     test_view_mounts,
     test_module_reorder_via_dnd,
@@ -223,6 +276,7 @@ TESTS = [
     test_feature_context_rename_ignores_same_label_with_whitespace,
     test_module_context_rename_ignores_same_label_with_whitespace,
     test_right_click_feature_opens_context_menu,
+    test_filter_hides_modules_with_zero_matching_features,
 ]
 
 

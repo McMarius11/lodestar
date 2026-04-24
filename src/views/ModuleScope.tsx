@@ -19,7 +19,13 @@ import { useFeatureActionsApi } from '@/hooks/useFeatureActionsApi'
 import type { Feature, Module } from '@/types'
 
 export function ModuleScope() {
-  const { project, modules: filteredModules } = useFilteredFeatures()
+  const {
+    project,
+    modules: filteredModules,
+    activeMilestone,
+    activeStatus,
+  } = useFilteredFeatures()
+  const filtersActive = activeMilestone !== 'all' || activeStatus !== 'all'
   const addFeature = useProjectStore((s) => s.addFeature)
   const reorderModules = useProjectStore((s) => s.reorderModules)
   const moveFeatureToModule = useProjectStore((s) => s.moveFeatureToModule)
@@ -38,10 +44,15 @@ export function ModuleScope() {
     return null
   })()
 
-  const modules = filteredModules.map(({ module: m, features }) => ({
-    ...m,
-    features,
-  }))
+  // While a filter is active, modules with no matching features are noise —
+  // hide them. With no filter, keep empty modules visible so the user can
+  // still add a feature into them via the inline + NEW affordance.
+  const modules = filteredModules
+    .filter(({ features }) => !filtersActive || features.length > 0)
+    .map(({ module: m, features }) => ({
+      ...m,
+      features,
+    }))
 
   const handleDrop = (targetId: string) => {
     if (dragFeatureId) {
