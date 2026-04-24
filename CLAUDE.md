@@ -249,6 +249,27 @@ aus `src/lib/featureActions.ts` — eine Factory, fünf Aufrufer.
 - **Bar-Drag (horizontal verschieben) + rechte Resize-Kante** → `setFeatureGantt`
 - **Das ist der einzige View wo Deps vollständig visualisiert werden**
 
+### Drawer (Overlay, kein eigener Tab)
+- Bottom-sliding Modal, öffnet über `drawerFeatureId` aus allen Views
+- **Feature-ID-Chip** (click-to-edit) → `renameFeatureId`, kaskadiert auf
+  alle `deps[*].id`, UI-State (cursor/drawer/depEditor) und
+  `mindmapPositions`-Keys
+- **Label** inline editierbar, Description als Markdown (Doppelklick)
+- **Tasks**: Add · Toggle · Delete · **Reorder per HTML5-DnD**
+  (`⋮⋮`-Handle on-hover, accent Drop-Line, Tail-Slot für Drop-at-End)
+  → `reorderTaskInFeature`
+- **Dependencies**: Add/Remove, Reason, Type (build/runtime/optional)
+- Effort-Dropdown, Milestone-Select, Wochen-Inputs, Delete-Feature
+
+### TopBar-Filter
+- Status + Milestone-Pills wie in `useFilteredFeatures`
+- **× Clear-Filters-Button** erscheint nur wenn ein Filter aktiv ist
+  → `clearFilters` (UI-State, kein Undo-Eintrag)
+
+### ModuleEditor (Popover)
+- Label-Input · **Modul-ID-Chip** (click-to-edit) · Color-Preset-Grid · Hex-Input
+- `renameModuleId` validiert Duplicate/Empty, kein Cross-Cascade nötig
+
 ## Persistenz
 
 Im Desktop-Build läuft Laden/Speichern über Electron-IPC
@@ -329,10 +350,13 @@ Diese Features kommen in v2 wenn der Grundaufbau steht.
 
 ## Planungs- und Review-Dokumente
 
-Über diese Spec hinaus leben im Repo-Root zwei lebende Planungsdateien —
+Über diese Spec hinaus leben im Repo-Root drei lebende Planungsdateien —
 wenn der User „bau v0.4" oder „mach die UX glatter" sagt, hier zuerst
 nachsehen:
 
+- [`FEATURE_AUDIT.md`](./FEATURE_AUDIT.md) — Feature-Inventur, Test-
+  Status, UI-Parität-Matrix (JSON-Felder × UI-Affordances), Liste der
+  geschlossenen und verbleibenden Lücken mit priorisierten Empfehlungen.
 - [`UX_FINDINGS.md`](./UX_FINDINGS.md) — 50+ UX-Observations aus dem
   Playwright-Testpass, gruppiert nach Kategorie, mit den dicken Hebeln
   für einen Polish-Release am Ende.
@@ -342,5 +366,5 @@ nachsehen:
   Roadmap-Vorschlag.
 
 `tests/playwright/FINDINGS.md` dagegen ist harness-scoped (was hat der
-Testpass gefunden + was ist behoben); die beiden Root-Dateien sind
+Testpass gefunden + was ist behoben); die drei Root-Dateien sind
 produkt-scoped.

@@ -61,8 +61,11 @@ Severity-Legende aus `tests/playwright/FINDINGS.md`:
   aktiv ist, fehlt „du siehst: v0.2 × blocked, 3 von 42 features".
 - **[nit] Status-Filter-Buttons sind farblos** — keine Verbindung zwischen
   Filter und StatusGlyph-Färbung auf Cards.
-- **[nit] Kein „Clear all filters"** — MS auf all + Status auf all muss
-  man manuell klicken.
+- ~~**[nit] Kein „Clear all filters"** — MS auf all + Status auf all muss
+  man manuell klicken.~~
+  → gefixt: `×`-Button neben `● FILTER` in `src/components/TopBar.tsx`,
+  ruft `clearFilters()` (kein Undo-Eintrag, analog zu anderen UI-State-
+  Resets).
 - **[nit] Roadmap-Spalten-Sortierung** — Milestones in Array-Reihenfolge,
   keine Sort-Controls.
 
@@ -81,8 +84,11 @@ Severity-Legende aus `tests/playwright/FINDINGS.md`:
 
 ## 6. Drawer & Tasks
 
-- **[minor] Tasks nicht reorderbar** — nur append + delete + edit, keine
-  DnD oder Pfeil-Buttons.
+- ~~**[minor] Tasks nicht reorderbar** — nur append + delete + edit, keine
+  DnD oder Pfeil-Buttons.~~
+  → gefixt: HTML5-DnD im Drawer (`⋮⋮`-Handle, accent Drop-Line,
+  Tail-Slot für Drop-at-End), Store-Action `reorderTaskInFeature` mit
+  Clamp + Undo-Support.
 - **[minor] Blocker-Zeile hat keine Feature-Links** — „waits on: X, Y" ist
   Klartext, nicht klickbar.
 - **[nit] Kein Effort-Shortcut** — Effort-Dropdown muss Maus-geklickt werden.
@@ -150,9 +156,16 @@ Severity-Legende aus `tests/playwright/FINDINGS.md`:
 3. **#9** — Drawer Prev/Next (verändert Review-Workflow fundamental)
 4. **#15** — Filter-aware Totals (vertrauensbildend)
 5. **#20** — Custom Drag-Preview (billig sieht anders aus)
-6. **#25** — Task-Reorder (fehlt in einem Tool das auf Tasks baut)
+6. ~~**#25** — Task-Reorder~~ (erledigt, siehe §6)
 7. **#39** — `today` als Date-Picker (Wochen-Integer ist ein Hack)
 8. **#44** — Onboarding-Tooltips (Discoverability für Erstbenutzer)
+
+Zusätzlich in v0.3.x erledigt (siehe `FEATURE_AUDIT.md`):
+
+- Feature-ID-Rename + Cascade (Drawer-ID-Chip)
+- Module-ID-Rename (ModuleEditor-ID-Chip)
+- Clear-Filters-Button (§4)
+- Task-Reorder per DnD (§6)
 
 Einzeln jede schon spürbar; zusammen fühlt sich die App anders an.
 

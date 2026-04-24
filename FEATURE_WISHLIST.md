@@ -35,6 +35,17 @@ den Drawer. Teilbar per Chat, gutes Callout aus externer Doku.
 
 **Größe:** klein — URL-Parser in `App.tsx`, `openDrawer` reagiert auf Hash-Change.
 
+> **Caveat seit v0.3.x**: Feature-IDs sind nicht mehr garantiert stabil —
+> `renameFeatureId` ist jetzt per UI erreichbar. Ein geteilter Permalink
+> auf `?feature=api` zeigt nach einem Rename auf `api-v2` ins Leere.
+> Zwei Wege:
+> (a) beim 404 eine freundliche „Feature nicht gefunden, aktuell gibt's
+>     X / Y / Z"-Ansicht zeigen,
+> (b) `previousIds: string[]` am Feature persistieren und nach der
+>     eigentlichen ID mitsuchen (kleiner Schema-Bump).
+> Variante (a) ist deutlich billiger und für den Use-Case (Chat-Links)
+> meist genug.
+
 ## Date-Picker statt Wochen-Integer · **2**
 
 `project.meta.today` ist heute Wochen-Integer (0-basiert). Für User unsexy —

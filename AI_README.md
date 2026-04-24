@@ -46,7 +46,8 @@ src/
 
   lib/                   ← pure, view-independent modules (no React imports)
     deps.ts              ← featureStatus, isBlocked, hasConflict, findFeature,
-                           featureIndex, moduleOf, matchesFilters, cycles
+                           featureIndex, moduleOf, matchesFilters, cycles,
+                           countIncomingDeps
     featureActions.ts    ← pure factory: Api → CtxMenuItem[] for all menus
     persistence.ts       ← load/save (Electron IPC or localStorage fallback);
                             loadProjectFromPath + saveProject(project, path?)
@@ -437,6 +438,22 @@ npm run electron:build   # full desktop build (AppImage / exe / dmg)
   `<DepEditorHost />`.
 - **Tab numbers `01–06`** in the TopBar are discoverability for the
   keyboard shortcuts `1–6`, not version numbers. They render as subscripts.
+- **ID renames cascade atomically.** `renameFeatureId(oldId, newId)`
+  mutates `feature.id`, every `dep.id === oldId` in every other feature,
+  `meta.mindmapPositions` keys and the session-state fields
+  (`drawerFeatureId`, `cursorFeatureId`, `depEditor.{from,to}Id`,
+  `mindmapOverrides` keys) inside a single `commit()` call — so Undo
+  unwinds everything in one step. Validation returns
+  `{ ok: false, reason: 'empty' | 'duplicate' | 'not-found' }` and
+  does not mutate. `renameModuleId` validates identically but has no
+  cross-references to cascade. The UI exposes both via click-to-edit
+  chips (`FeatureIdChip` in `TaskDrawer.tsx`, `module-editor-id` in
+  `ModuleEditor.tsx`).
+- **Task reorder inside a feature** is a dedicated store action,
+  `reorderTaskInFeature(featureId, taskId, targetIndex)`, mirroring
+  `reorderFeatureInModule`. The Drawer wires HTML5-DnD on each task
+  `<li>` with a drop-indicator line and a tail slot so you can drop at
+  the end. Target-index clamping lives in the store, not the view.
 
 ---
 
