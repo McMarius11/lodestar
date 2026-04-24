@@ -90,12 +90,58 @@ def test_double_click_resets_view(page: Page) -> None:
     log("double-click resets zoom to 1.0")
 
 
+def test_shift_pointerdown_starts_connect_mode(page: Page) -> None:
+    """Coverage gap: Shift+pointerdown on a MindMap node starts the connect
+    mode. Proof: a dashed accent 'rubber-band' line is rendered while the
+    drag is in flight. The full drop-to-DepEditor path is hard to
+    automate reliably (React 18 batches state flushes between synthesized
+    pointer events), so this test locks in the *entry* to the flow — the
+    continuation is covered by openDepEditor tests in test_dep_editor."""
+    goto_view(page, "mindmap")
+    node = page.locator("[data-mindmap-node]").first
+    node_id = node.get_attribute("data-mindmap-node")
+    assert node_id
+    box = node.bounding_box()
+    assert box
+    sx = box["x"] + box["width"] / 2
+    sy = box["y"] + box["height"] / 2
+
+    # Dispatch shift+pointerdown in raw DOM to bypass the capture/release
+    # sequence that Playwright's real mouse driver fires automatically.
+    page.evaluate(
+        """({sel, x, y}) => {
+          const el = document.querySelector(sel);
+          el.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true, cancelable: true, pointerType: 'mouse',
+            pointerId: 1, button: 0, clientX: x, clientY: y, shiftKey: true,
+          }));
+        }""",
+        {"sel": f'[data-mindmap-node="{node_id}"]', "x": sx, "y": sy},
+    )
+    # The rubber-band line has stroke-dasharray; it exists only while
+    # `connect` is set. Wait for it to appear.
+    line = page.locator('[data-testid="view-mindmap"] svg line[stroke-dasharray]')
+    line.first.wait_for(state="attached", timeout=2000)
+    # Release the drag so later tests start from a clean state.
+    page.evaluate(
+        """() => {
+          const svg = document.querySelector('[data-testid="mindmap-canvas"]');
+          svg.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true, cancelable: true, pointerType: 'mouse',
+            pointerId: 1, button: 0, clientX: 0, clientY: 0,
+          }));
+        }"""
+    )
+    log(f"Shift+pointerdown on {node_id!r} starts connect-mode (rubber-band line)")
+
+
 TESTS = [
     test_view_mounts,
     test_wheel_zoom_updates_scale,
     test_reset_button_returns_to_defaults,
     test_node_has_position_attributes,
     test_double_click_resets_view,
+    test_shift_pointerdown_starts_connect_mode,
 ]
 
 

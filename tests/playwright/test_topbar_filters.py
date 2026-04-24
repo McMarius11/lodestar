@@ -174,6 +174,35 @@ def test_filter_active_banner(page: Page) -> None:
     log("header FILTER label reflects active-state")
 
 
+def test_clear_filters_button(page: Page) -> None:
+    # button is hidden while no filter is active
+    assert page.locator('[data-testid="btn-clear-filters"]').count() == 0, (
+        "clear-filters button should be hidden when no filter is active"
+    )
+    page.get_by_test_id("filter-status-blocked").click()
+    # Pick the first non-'all' milestone pill to also activate MS filter
+    ms_pills = page.locator('[data-testid^="filter-ms-"]').evaluate_all(
+        "els => els.map(e => e.getAttribute('data-testid'))"
+    )
+    non_all = [t for t in ms_pills if t != "filter-ms-all"]
+    assert non_all, "seed has at least one non-'all' milestone pill"
+    page.get_by_test_id(non_all[0]).click()
+    # button now appears
+    btn = page.get_by_test_id("btn-clear-filters")
+    btn.wait_for()
+    btn.click()
+    assert (
+        page.get_by_test_id("filter-status-all").get_attribute("aria-pressed") == "true"
+    )
+    assert (
+        page.get_by_test_id("filter-ms-all").get_attribute("aria-pressed") == "true"
+    )
+    assert page.locator('[data-testid="btn-clear-filters"]').count() == 0, (
+        "clear-filters button should hide again once filters are reset"
+    )
+    log("clear-filters button resets both filters and hides itself")
+
+
 def test_undo_redo_disabled_state(page: Page) -> None:
     """Boot state is implementation-defined: if the user clicked 'Try the
     Nimbus example', loadSample() commits and bumps history. We verify the
@@ -277,6 +306,7 @@ TESTS = [
     test_status_filter_actually_filters_scope,
     test_filter_persists_across_views,
     test_filter_active_banner,
+    test_clear_filters_button,
     test_undo_redo_disabled_state,
     test_undo_redo_enabled_after_edit,
     test_new_menu_items,

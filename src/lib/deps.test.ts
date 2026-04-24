@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Feature, Project } from '@/types'
 import {
   blockedBy,
+  countIncomingDeps,
   depStatus,
   findCycles,
   hasConflict,
@@ -169,5 +170,28 @@ describe('findCycles', () => {
     const a = mkFeat({ id: 'a', deps: [{ id: 'ghost', reason: '', type: 'build' }] })
     const p = mkProject([a])
     expect(findCycles(p).cycles).toEqual([])
+  })
+})
+
+describe('countIncomingDeps', () => {
+  it('returns 0 for a feature nobody depends on', () => {
+    const a = mkFeat({ id: 'a' })
+    const b = mkFeat({ id: 'b' })
+    const p = mkProject([a, b])
+    expect(countIncomingDeps(p, 'a')).toBe(0)
+  })
+
+  it('counts each dependent feature once per dep record', () => {
+    const a = mkFeat({ id: 'a' })
+    const b = mkFeat({ id: 'b', deps: [{ id: 'a', reason: '', type: 'build' }] })
+    const c = mkFeat({ id: 'c', deps: [{ id: 'a', reason: '', type: 'runtime' }] })
+    const p = mkProject([a, b, c])
+    expect(countIncomingDeps(p, 'a')).toBe(2)
+  })
+
+  it('ignores self-references (cycles are counted by findCycles, not here)', () => {
+    const a = mkFeat({ id: 'a', deps: [{ id: 'a', reason: '', type: 'build' }] })
+    const p = mkProject([a])
+    expect(countIncomingDeps(p, 'a')).toBe(0)
   })
 })

@@ -14,7 +14,7 @@ import { CURRENT_SCHEMA_VERSION, migrate } from '@/schema'
 import { sampleProject } from '@/data/sample'
 import { lodestarRoadmap } from '@/data/lodestarRoadmap'
 import { newId, slugId } from '@/lib/id'
-import { featureStatus, findFeature, moduleOf } from '@/lib/deps'
+import { featureIndex, featureStatus, findFeature, moduleOf } from '@/lib/deps'
 import {
   loadRecents,
   saveRecents,
@@ -81,6 +81,7 @@ type Actions = {
   setActiveView: (v: ViewId) => void
   setActiveMilestone: (ms: string | 'all') => void
   setActiveStatus: (s: StatusFilter) => void
+  clearFilters: () => void
   setCursorFeature: (id: string | null) => void
   openDrawer: (id: string | null) => void
   togglePalette: (open?: boolean) => void
@@ -96,11 +97,13 @@ type Actions = {
 
   addFeature: (moduleId: string, partial?: Partial<Feature>) => string
   updateFeature: (featureId: string, patch: Partial<Feature>) => void
+  renameFeatureId: (oldId: string, newId: string) => { ok: true } | { ok: false; reason: string }
   deleteFeature: (featureId: string) => void
   cloneFeature: (featureId: string) => string | null
   moveFeatureToModule: (featureId: string, targetModuleId: string) => void
   moveFeatureToMs: (featureId: string, ms: string) => void
   reorderFeatureInModule: (featureId: string, targetIndex: number) => void
+  reorderTaskInFeature: (featureId: string, taskId: string, targetIndex: number) => void
   setFeatureGantt: (featureId: string, range: { start: number; end: number }) => void
   setKanbanRank: (featureId: string, rank: number) => void
   normalizeKanbanRanks: () => void
@@ -112,6 +115,7 @@ type Actions = {
 
   addModule: (partial?: Partial<Module>) => string
   updateModule: (moduleId: string, patch: Partial<Module>) => void
+  renameModuleId: (oldId: string, newId: string) => { ok: true } | { ok: false; reason: string }
   deleteModule: (moduleId: string) => void
   reorderModules: (ids: string[]) => void
   cloneModule: (moduleId: string) => string | null
@@ -446,6 +450,11 @@ export const useProjectStore = create<State & Actions>()(
     setActiveView: (v) => set((s) => void (s.activeView = v)),
     setActiveMilestone: (ms) => set((s) => void (s.activeMilestone = ms)),
     setActiveStatus: (st) => set((s) => void (s.activeStatus = st)),
+    clearFilters: () =>
+      set((s) => {
+        s.activeMilestone = 'all'
+        s.activeStatus = 'all'
+      }),
     setCursorFeature: (id) => set((s) => void (s.cursorFeatureId = id)),
     openDrawer: (id) => set((s) => void (s.drawerFeatureId = id)),
     togglePalette: (open) =>
@@ -618,6 +627,22 @@ export const useProjectStore = create<State & Actions>()(
       })
     },
 
+    reorderTaskInFeature: (featureId, taskId, targetIndex) => {
+      const project = get().project
+      const feat = findFeature(project, featureId)
+      if (!feat) return
+      const sourceIndex = feat.tasks.findIndex((t) => t.id === taskId)
+      if (sourceIndex < 0) return
+      commit((s) => {
+        const f = findFeature(s.project, featureId)
+        if (!f) return
+        const [moved] = f.tasks.splice(sourceIndex, 1)
+        if (!moved) return
+        const clamped = Math.max(0, Math.min(targetIndex, f.tasks.length))
+        f.tasks.splice(clamped, 0, moved)
+      })
+    },
+
     setFeatureGantt: (featureId, { start, end }) => {
       if (end <= start) end = start + 1
       commit((s) => {
@@ -701,6 +726,53 @@ export const useProjectStore = create<State & Actions>()(
       })
     },
 
+    /**
+     * Renames `feature.id` in place. Cascades to:
+     *  - every other feature's `deps[*].id` that pointed at the old id
+     *  - `project.meta.mindmapPositions` keys
+     *  - UI state: `drawerFeatureId`, `cursorFeatureId`
+     *
+     * Validation (all rejections return `{ ok: false, reason }`, no mutation):
+     *  - trimmed new id must be non-empty
+     *  - no-op when unchanged (returns ok so callers can treat "same" as success)
+     *  - new id must not already belong to another feature
+     */
+    renameFeatureId: (oldId, newId) => {
+      const trimmed = newId.trim()
+      if (!trimmed) return { ok: false, reason: 'empty' }
+      if (trimmed === oldId) return { ok: true }
+      const project = get().project
+      const idx = featureIndex(project)
+      if (!idx.has(oldId)) return { ok: false, reason: 'not-found' }
+      if (idx.has(trimmed)) return { ok: false, reason: 'duplicate' }
+      commit((s) => {
+        for (const m of s.project.modules) {
+          for (const f of m.features) {
+            if (f.id === oldId) f.id = trimmed
+            for (const d of f.deps) {
+              if (d.id === oldId) d.id = trimmed
+            }
+          }
+        }
+        const positions = s.project.meta.mindmapPositions
+        if (positions && positions[oldId]) {
+          positions[trimmed] = positions[oldId]
+          delete positions[oldId]
+        }
+        if (s.drawerFeatureId === oldId) s.drawerFeatureId = trimmed
+        if (s.cursorFeatureId === oldId) s.cursorFeatureId = trimmed
+        if (s.mindmapOverrides[oldId]) {
+          s.mindmapOverrides[trimmed] = s.mindmapOverrides[oldId]
+          delete s.mindmapOverrides[oldId]
+        }
+        if (s.depEditor) {
+          if (s.depEditor.fromId === oldId) s.depEditor.fromId = trimmed
+          if (s.depEditor.toId === oldId) s.depEditor.toId = trimmed
+        }
+      })
+      return { ok: true }
+    },
+
     deleteFeature: (featureId) => {
       commit((s) => {
         for (const m of s.project.modules) {
@@ -761,6 +833,28 @@ export const useProjectStore = create<State & Actions>()(
         const m = s.project.modules.find((x) => x.id === moduleId)
         if (m) Object.assign(m, patch)
       })
+    },
+
+    /**
+     * Renames `module.id` in place. Unlike features there are no
+     * cross-references in the data model (features live inside a module,
+     * they don't reference it by id), so no cascade is needed.
+     * Validation mirrors `renameFeatureId`.
+     */
+    renameModuleId: (oldId, newId) => {
+      const trimmed = newId.trim()
+      if (!trimmed) return { ok: false, reason: 'empty' }
+      if (trimmed === oldId) return { ok: true }
+      const project = get().project
+      const current = project.modules.find((m) => m.id === oldId)
+      if (!current) return { ok: false, reason: 'not-found' }
+      if (project.modules.some((m) => m.id === trimmed))
+        return { ok: false, reason: 'duplicate' }
+      commit((s) => {
+        const m = s.project.modules.find((x) => x.id === oldId)
+        if (m) m.id = trimmed
+      })
+      return { ok: true }
     },
 
     deleteModule: (moduleId) => {

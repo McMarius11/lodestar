@@ -494,6 +494,122 @@ def test_task_delete_action_is_keyboard_focusable(page: Page) -> None:
     log("task delete affordance is keyboard focusable")
 
 
+def test_feature_id_rename_cascades_to_deps(page: Page) -> None:
+    # Pick a feature other features depend on. 'api' in the seed has incoming deps.
+    proj_before = get_project(page)
+    incoming = [
+        f["id"]
+        for m in proj_before["modules"]
+        for f in m["features"]
+        if any(d["id"] == "api" for d in f["deps"])
+    ]
+    assert incoming, "seed expectation: at least one feature depends on 'api'"
+    _open_feature(page, "api")
+
+    page.get_by_test_id("drawer-feature-id").click()
+    inp = page.get_by_test_id("drawer-feature-id-input")
+    inp.fill("api-v2")
+    inp.press("Enter")
+    wait_idle(page)
+
+    after = get_project(page)
+    assert feature_by_id(after, "api-v2") is not None, "renamed feature not found"
+    assert feature_by_id(after, "api") is None, "old id should be gone"
+    for fid in incoming:
+        f = feature_by_id(after, fid)
+        assert f is not None
+        dep_targets = [d["id"] for d in f["deps"]]
+        assert "api-v2" in dep_targets and "api" not in dep_targets, (
+            f"dep in {fid!r} was not repointed: {dep_targets!r}"
+        )
+    # drawer stays anchored on the renamed feature
+    drawer = page.get_by_test_id("dialog-task")
+    assert drawer.get_attribute("data-drawer-feature") == "api-v2"
+
+    # undo restores everything
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    restored = get_project(page)
+    assert feature_by_id(restored, "api") is not None
+    assert feature_by_id(restored, "api-v2") is None
+    log(f"feature-id rename cascades to {len(incoming)} dep(s) and undoes")
+
+
+def test_feature_id_rename_rejects_duplicate(page: Page) -> None:
+    _open_feature(page, "api")
+    page.get_by_test_id("drawer-feature-id").click()
+    inp = page.get_by_test_id("drawer-feature-id-input")
+    inp.fill("auth")  # 'auth' exists in seed
+    inp.press("Enter")
+    # input stays editable (rejection), error message visible
+    page.wait_for_selector('[data-testid="drawer-feature-id-error"]')
+    proj = get_project(page)
+    assert feature_by_id(proj, "api") is not None, "duplicate rename must not mutate state"
+    # cancel
+    page.keyboard.press("Escape")
+    close_drawer(page)
+    log("duplicate feature-id rename is refused and shows error")
+
+
+def test_feature_id_rename_esc_cancels_draft(page: Page) -> None:
+    _open_feature(page, "auth")
+    page.get_by_test_id("drawer-feature-id").click()
+    inp = page.get_by_test_id("drawer-feature-id-input")
+    inp.fill("typed-but-cancelled")
+    page.keyboard.press("Escape")
+    # chip is back to non-editing state with the original id
+    chip = page.get_by_test_id("drawer-feature-id")
+    chip.wait_for()
+    assert chip.inner_text().strip() == "auth"
+    proj = get_project(page)
+    assert feature_by_id(proj, "auth") is not None
+    close_drawer(page)
+    log("Esc cancels feature-id rename draft without side effect")
+
+
+def test_task_reorder_via_drag_and_drop(page: Page) -> None:
+    # Find a seed feature with ≥3 tasks to exercise a meaningful reorder.
+    proj = get_project(page)
+    candidate = None
+    for m in proj["modules"]:
+        for f in m["features"]:
+            if len(f["tasks"]) >= 3:
+                candidate = f
+                break
+        if candidate:
+            break
+    if not candidate:
+        note_finding("Bugs", "minor", "test_task_reorder_via_drag_and_drop",
+                     "seed has no feature with ≥3 tasks; skipped")
+        return
+
+    fid = candidate["id"]
+    task_ids_before = [t["id"] for t in candidate["tasks"]]
+    first_id, _second, last_id = task_ids_before[0], task_ids_before[1], task_ids_before[-1]
+    _open_feature(page, fid)
+
+    # DnD last task to the very top via HTML5-DnD helper.
+    from _lib import dnd_html5  # local import keeps top imports tidy
+    src = f'[data-testid="dialog-task"] [data-task-id="{last_id}"]'
+    dst = f'[data-testid="dialog-task"] [data-task-id="{first_id}"]'
+    dnd_html5(page, src, dst)
+    wait_idle(page)
+
+    after = get_project(page)
+    new_tasks = [t["id"] for t in feature_by_id(after, fid)["tasks"]]  # type: ignore[index]
+    assert new_tasks[0] == last_id, f"expected {last_id!r} at head, got {new_tasks!r}"
+    assert set(new_tasks) == set(task_ids_before), "task set must be preserved"
+
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    restored = get_project(page)
+    ids_restored = [t["id"] for t in feature_by_id(restored, fid)["tasks"]]  # type: ignore[index]
+    assert ids_restored == task_ids_before
+    log(f"task-reorder DnD moved {last_id!r} to head and undoes cleanly")
+
+
 TESTS = [
     test_open_via_click,
     test_open_via_context_menu,
@@ -517,6 +633,10 @@ TESTS = [
     test_mobile_drawer_stacks_sections_and_keeps_footer_controls_visible,
     test_mobile_delete_actions_stay_visible_for_tasks_and_dependencies,
     test_task_delete_action_is_keyboard_focusable,
+    test_feature_id_rename_cascades_to_deps,
+    test_feature_id_rename_rejects_duplicate,
+    test_feature_id_rename_esc_cancels_draft,
+    test_task_reorder_via_drag_and_drop,
 ]
 
 

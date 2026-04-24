@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { useProjectStore } from '@/store/useProjectStore'
-import { blockedBy, completion, depStatus, featureIndex, hasConflict, milestoneOrder } from '@/lib/deps'
+import { blockedBy, completion, countIncomingDeps, depStatus, featureIndex, hasConflict, milestoneOrder } from '@/lib/deps'
 import { commitInlineEdit } from '@/lib/editable'
 import { StatusGlyph } from './StatusGlyph'
 import { EffortBadge } from './EffortBadge'
@@ -73,11 +73,15 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
   const addTask = useProjectStore((s) => s.addTask)
   const deleteTask = useProjectStore((s) => s.deleteTask)
   const updateFeature = useProjectStore((s) => s.updateFeature)
+  const renameFeatureId = useProjectStore((s) => s.renameFeatureId)
+  const reorderTaskInFeature = useProjectStore((s) => s.reorderTaskInFeature)
   const setFeatureGantt = useProjectStore((s) => s.setFeatureGantt)
   const deleteFeature = useProjectStore((s) => s.deleteFeature)
   const addDep = useProjectStore((s) => s.addDep)
   const removeDep = useProjectStore((s) => s.removeDep)
   const updateDep = useProjectStore((s) => s.updateDep)
+  const [taskDragId, setTaskDragId] = useState<string | null>(null)
+  const [taskDropIndex, setTaskDropIndex] = useState<number | null>(null)
 
   const idx = featureIndex(project)
   const feat = idx.get(id)
@@ -121,7 +125,11 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
             />
             <span>{module?.label}</span>
             <span className="text-fg-subtle">/</span>
-            <span className="num-mono">{feat.id}</span>
+            <FeatureIdChip
+              featureId={feat.id}
+              depCount={countIncomingDeps(project, feat.id)}
+              onRename={(next) => renameFeatureId(feat.id, next)}
+            />
             <span className="text-fg-subtle">·</span>
             <span className="num-mono text-accent">{feat.ms}</span>
             <span className="text-fg-subtle">·</span>
@@ -179,50 +187,110 @@ function DrawerBody({ id, onClose }: { id: string; onClose: () => void }) {
               <span className="num-mono">{total}</span>
             </span>
           </h3>
-          <ul>
-            {feat.tasks.map((t) => (
+          <ul
+            onDragLeave={(e) => {
+              // reset drop indicator when leaving the list container
+              if (e.currentTarget === e.target) setTaskDropIndex(null)
+            }}
+          >
+            {feat.tasks.map((t, i) => {
+              const isDragging = taskDragId === t.id
+              const showDropLine = taskDropIndex === i && taskDragId !== null
+              return (
+                <li
+                  key={t.id}
+                  data-task-id={t.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData('text/lodestar-task', t.id)
+                    setTaskDragId(t.id)
+                  }}
+                  onDragOver={(e) => {
+                    if (!taskDragId) return
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    const before = e.clientY < rect.top + rect.height / 2
+                    setTaskDropIndex(before ? i : i + 1)
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const movedId = e.dataTransfer.getData('text/lodestar-task')
+                    if (!movedId) return
+                    const srcIdx = feat.tasks.findIndex((x) => x.id === movedId)
+                    const dstIdx = taskDropIndex ?? i
+                    // Adjust destination when moving within the same list to
+                    // account for the source slot being removed first.
+                    const adjusted = srcIdx >= 0 && srcIdx < dstIdx ? dstIdx - 1 : dstIdx
+                    if (srcIdx !== adjusted) reorderTaskInFeature(feat.id, movedId, adjusted)
+                    setTaskDragId(null)
+                    setTaskDropIndex(null)
+                  }}
+                  onDragEnd={() => {
+                    setTaskDragId(null)
+                    setTaskDropIndex(null)
+                  }}
+                  className={clsx(
+                    'group relative flex items-center gap-3 py-2 border-b border-line/40',
+                    isDragging && 'opacity-40',
+                    showDropLine &&
+                      'before:absolute before:left-0 before:right-0 before:-top-[1px] before:h-[2px] before:bg-accent',
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className="text-fg-subtle opacity-0 group-hover:opacity-100 transition-opacity cursor-grab select-none shrink-0"
+                    title="Drag to reorder"
+                  >
+                    ⋮⋮
+                  </span>
+                  <button
+                    onClick={() => toggleTask(feat.id, t.id)}
+                    className={clsx(
+                      'w-4 h-4 border flex items-center justify-center transition-colors',
+                      t.done
+                        ? 'bg-success border-success'
+                        : 'border-line-strong hover:border-fg',
+                    )}
+                  >
+                    {t.done && (
+                      <svg viewBox="0 0 10 10" width="8" height="8">
+                        <path
+                          d="M1.5 5 L4 7.5 L8.5 2"
+                          stroke="rgb(var(--void))"
+                          strokeWidth="2"
+                          fill="none"
+                        />
+                      </svg>
+                    )}
+                  </button>
+                  <span
+                    className={clsx(
+                      'flex-1 text-sm',
+                      t.done ? 'text-fg-muted line-through' : 'text-fg',
+                    )}
+                  >
+                    {t.label}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteTask(feat.id, t.id)}
+                    aria-label={`Delete task ${t.label}`}
+                    className="label-mono text-fg-subtle opacity-70 transition-opacity hover:opacity-100 hover:text-danger"
+                  >
+                    DEL
+                  </button>
+                </li>
+              )
+            })}
+            {taskDragId && taskDropIndex === feat.tasks.length && (
               <li
-                key={t.id}
-                className="group flex items-center gap-3 py-2 border-b border-line/40"
-              >
-                <button
-                  onClick={() => toggleTask(feat.id, t.id)}
-                  className={clsx(
-                    'w-4 h-4 border flex items-center justify-center transition-colors',
-                    t.done
-                      ? 'bg-success border-success'
-                      : 'border-line-strong hover:border-fg',
-                  )}
-                >
-                  {t.done && (
-                    <svg viewBox="0 0 10 10" width="8" height="8">
-                      <path
-                        d="M1.5 5 L4 7.5 L8.5 2"
-                        stroke="rgb(var(--void))"
-                        strokeWidth="2"
-                        fill="none"
-                      />
-                    </svg>
-                  )}
-                </button>
-                <span
-                  className={clsx(
-                    'flex-1 text-sm',
-                    t.done ? 'text-fg-muted line-through' : 'text-fg',
-                  )}
-                >
-                  {t.label}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => deleteTask(feat.id, t.id)}
-                  aria-label={`Delete task ${t.label}`}
-                  className="label-mono text-fg-subtle opacity-70 transition-opacity hover:opacity-100 hover:text-danger"
-                >
-                  DEL
-                </button>
-              </li>
-            ))}
+                aria-hidden
+                className="h-[2px] bg-accent"
+                data-testid="task-drop-tail"
+              />
+            )}
           </ul>
           <form
             onSubmit={(e) => {
@@ -554,5 +622,112 @@ function AddDepRow({
         </button>
       </div>
     </div>
+  )
+}
+
+type FeatureIdChipProps = {
+  featureId: string
+  depCount: number
+  onRename: (newId: string) => { ok: true } | { ok: false; reason: string }
+}
+
+/**
+ * Click-to-edit chip for renaming a feature's id. Cascades to all dependents
+ * via `renameFeatureId` in the store. Rejects empty / duplicate / whitespace
+ * inputs with an inline hint; Esc cancels. Intentionally small and quiet —
+ * ID changes are a power-user affordance, not a front-line control.
+ */
+function FeatureIdChip({ featureId, depCount, onRename }: FeatureIdChipProps) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(featureId)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setDraft(featureId)
+    setError(null)
+  }, [featureId])
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setDraft(featureId)
+          setError(null)
+          setEditing(true)
+        }}
+        data-testid="drawer-feature-id"
+        title="Click to rename id"
+        className="num-mono hover:text-accent hover:underline decoration-dotted underline-offset-2 transition-colors"
+      >
+        {featureId}
+      </button>
+    )
+  }
+
+  const commit = () => {
+    const next = draft.trim()
+    if (!next || next === featureId) {
+      setEditing(false)
+      setError(null)
+      setDraft(featureId)
+      return
+    }
+    const res = onRename(next)
+    if (res.ok) {
+      setEditing(false)
+      setError(null)
+      return
+    }
+    setError(
+      res.reason === 'duplicate'
+        ? 'id already in use'
+        : res.reason === 'empty'
+        ? 'cannot be empty'
+        : 'invalid id',
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          if (error) setError(null)
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            setDraft(featureId)
+            setError(null)
+            setEditing(false)
+          }
+        }}
+        data-testid="drawer-feature-id-input"
+        aria-label="Feature id"
+        className={clsx(
+          'num-mono bg-sunken/40 outline-none px-1.5 border text-fg w-40',
+          error ? 'border-danger' : 'border-line/60 focus:border-accent',
+        )}
+      />
+      {error ? (
+        <span
+          className="label-mono text-danger"
+          data-testid="drawer-feature-id-error"
+        >
+          {error}
+        </span>
+      ) : depCount > 0 ? (
+        <span className="label-mono text-fg-subtle">
+          {depCount} dep{depCount === 1 ? '' : 's'} will be repointed
+        </span>
+      ) : null}
+    </span>
   )
 }
