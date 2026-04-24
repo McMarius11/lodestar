@@ -54,8 +54,13 @@ src/
     recentFiles.ts       ← Recent-files list (localStorage) — pure transforms
                             (upsertRecent/removeRecent) + tiny I/O wrappers
     lastSession.ts       ← remembers last opened path for "Continue" button
+    sessionTracking.ts   ← thin combiner: rememberOpened(path) + the
+                           pathless-default variant. Used by every store
+                           action that opens a project.
     validate.ts          ← lint rules for the Validation panel
     markdown.ts          ← tiny markdown → HTML for feature descriptions
+    editable.ts          ← commitInlineEdit() — shared rename-on-blur policy
+                           for the two single-line inline editors
     id.ts                ← nanoid wrappers (newId, slugId)
 
   hooks/                 ← React hooks only. Can import from store + lib.
@@ -69,7 +74,7 @@ src/
   components/            ← reusable UI (stateless where possible)
     TopBar.tsx, TaskDrawer.tsx, CommandPalette.tsx, ContextMenu.tsx,
     DepEditorPopover.tsx, MilestoneEditor.tsx, ModuleEditor.tsx,
-    StatusGlyph.tsx, EffortBadge.tsx, ProgressBar.tsx, …
+    TaskRow.tsx, StatusGlyph.tsx, EffortBadge.tsx, ProgressBar.tsx, …
 
   views/                 ← one per primary tab
     ModuleScope.tsx, Roadmap.tsx, Kanban.tsx, MindMap.tsx, Gantt.tsx
@@ -139,6 +144,38 @@ Filters, drawer state, palette-open, zoom factors do NOT participate in undo.
 - Do not add a new action that bypasses `commit` for data mutations —
   undo will silently stop working for that action.
 
+### Persistent vs transient state
+
+The store mixes two kinds of state in one bag. Knowing which is which decides
+whether a new field needs `commit()` or just `set()`, and whether
+`resetProjectSessionState()` (called on every project switch) needs to clear it.
+
+**Persistent (project data — goes through `commit()`, lives in undo history,
+written to disk):**
+
+- `project` — the entire `Project` document (modules, features, deps, tasks,
+  meta, milestones, mindmap pinned positions).
+
+**Transient (UI session state — uses `set()`, cleared by
+`resetProjectSessionState()` on project open / new / close):**
+
+- `externalChangePending` — the disk-conflict latch
+- `activeView`, `activeMilestone`, `activeStatus` — global filters/tab
+- `cursorFeatureId`, `drawerFeatureId`
+- `paletteOpen`, `helpOpen`, `msEditorOpen`, `metaEditorOpen`
+- `history`, `future` — undo/redo stacks (intentionally cleared on switch)
+- `mindmapOverrides` — volatile node positions before user pins them
+- `depEditor` — dep-editor singleton position
+
+**Bookkeeping (uses `set()`, lifecycle-managed by the load/save flow, NOT
+reset on project switch — they describe the load itself):**
+
+- `loaded`, `source`, `currentPath`, `saveStatus`, `savedAt`
+
+When you add a new state field: ask "does undo need to step through this?". If
+yes, the actions that change it must use `commit()`. If it's UI-only and
+should not survive a project change, add it to `resetProjectSessionState()`.
+
 ---
 
 ## Data flow
@@ -165,6 +202,63 @@ Filters, drawer state, palette-open, zoom factors do NOT participate in undo.
   watched at `~/foo/x.json`, not at the default slot. If a drawer is open,
   reload is deferred (`externalChangePending`) and the user decides when to
   pull.
+
+### The external-change loop
+
+Most "I edited the file from outside the app" surprises map onto this loop —
+trace it from top to bottom when something feels off.
+
+```
+local edit                              external edit (Claude, git, editor)
+   │                                              │
+   ▼                                              ▼
+commit(mutator)                       fs writes data/project.json
+   │                                              │
+   ▼                                              ▼
+_persist (debounced ~250ms)            electron/main.ts fs.watch fires
+   │                                              │
+   ▼                                              ▼
+saveProject → fs write                 preload IPC → subscribeExternalChange
+                                                  │
+                                                  ▼
+                                       store.init()'s callback runs:
+                                          if (drawer || palette || help ||
+                                              ms-editor || meta-editor ||
+                                              dep-editor || input-focused ||
+                                              save in flight)
+                                              → externalChangePending = true
+                                                saveStatus = 'conflict'
+                                                ExternalChangeBanner shows
+                                          else
+                                              → reloadFromDisk() immediately
+```
+
+Why the deferral: a reload would discard the user's in-flight edit. The
+banner gives them two explicit choices — `Reload from disk` (drop local) or
+`Keep mine` (re-arm autosave so the next `_persist` overwrites the disk
+copy). See `useProjectStore.test.ts` for the regression suite around these
+two paths.
+
+### Recent projects + last session
+
+`lib/recentFiles.ts` and `lib/lastSession.ts` are the persistent memory the
+Welcome screen reads from. They are deliberately small and pure-ish:
+
+- `recentFiles.ts` — the recent list. Pure transforms (`upsertRecent`,
+  `removeRecent`) plus a thin `loadRecents` / `saveRecents` localStorage
+  wrapper. Recents may be pathless (browser-mode named entries) or
+  path-bearing (Electron disk files).
+- `lastSession.ts` — single record `{ path, when }` describing the most
+  recently opened project. `path: null` means "the canonical default slot".
+  Drives the Welcome screen's `Continue` button.
+- `lib/sessionTracking.ts` — the only place that combines the two.
+  `rememberOpened(path)` updates both stores in one breath; every store
+  action that opens a named file calls it. `markDefaultSlotOpened(name?)`
+  is the pathless variant for browser-mode loads.
+
+UI components only ever **read** these via `store.recents()` /
+`store.lastSession()`, or prune via `store.forgetRecent(predicate)`. Direct
+imports in views would bypass the store invariants — don't.
 
 ---
 
@@ -222,12 +316,53 @@ additional `CtxMenuItem` objects. No React state lives here.
 
 ### A schema change
 
-1. Bump `CURRENT_SCHEMA_VERSION` in `src/schema.ts`.
-2. Add a migration case in `migrate()`.
-3. Add or adjust fields in `src/types.ts` and the Zod schema.
-4. Update `src/data/sample.ts` and `data/project.example.json` to the new
-   `schemaVersion`.
-5. Leave any dogfood sample (`data/lodestar-v*.json`) conformant.
+Walk-through with a concrete example: adding `feature.tags: string[]` (v3 → v4).
+
+1. **Bump the constant.** In `src/schema.ts`:
+   ```ts
+   export const CURRENT_SCHEMA_VERSION = 4
+   ```
+
+2. **Add a migration case** in `migrate()`. Migrations stack — `migrate` walks
+   from whatever `schemaVersion` the file declares up to current, one step at
+   a time. Each case takes the n-1 shape and returns the n shape; never skip
+   versions.
+   ```ts
+   if (raw.meta.schemaVersion === 3) {
+     for (const m of raw.modules) {
+       for (const f of m.features) {
+         if (!Array.isArray(f.tags)) f.tags = []
+       }
+     }
+     raw.meta.schemaVersion = 4
+   }
+   ```
+
+3. **Update the type.** In `src/types.ts`:
+   ```ts
+   type Feature = { /* … */; tags: string[] }
+   ```
+
+4. **Update the Zod schema** in `src/schema.ts` so the validation pass after
+   migration accepts the new shape:
+   ```ts
+   const FeatureSchema = z.object({ /* … */, tags: z.array(z.string()) })
+   ```
+
+5. **Bump the seeds**: `src/data/sample.ts`, `src/data/lodestarRoadmap.ts`,
+   and `data/project.example.json` get `schemaVersion: 4` and an empty
+   `tags: []` on every feature (or a meaningful seed value).
+
+6. **Add a migration test** in `src/schema.test.ts`: feed a v3 fixture and
+   assert the result is a valid v4 with `tags === []`. The existing tests in
+   that file are the template.
+
+7. **Run the gate**: `npm run typecheck && npm test`. Both must pass before
+   commit, since strict TS will surface every place that destructures a
+   `Feature` and forgot the new field.
+
+If the new field needs UI affordance (filter, drawer field, badge), that's a
+follow-up — keep the schema change minimal and shippable on its own.
 
 ---
 
@@ -260,12 +395,18 @@ additional `CtxMenuItem` objects. No React state lives here.
 ## Testing
 
 `npm run typecheck` — strict TypeScript, first gate.
-`npm test` — Vitest. Currently covers `deps.ts` (37 test cases across
-`deps.test.ts`, `validate.test.ts`, `schema.test.ts`).
+`npm test` — Vitest. Currently ~70 test cases across `deps.test.ts`,
+`validate.test.ts`, `schema.test.ts`, `recentFiles.test.ts`,
+`lastSession.test.ts`, `editable.test.ts`, and `useProjectStore.test.ts`
+(which mocks `persistence`/`recentFiles`/`lastSession` and exercises external
+change, project switches, label hygiene, and undo invariants).
 
 Add unit tests for any new pure function in `lib/`. Views aren't
-component-tested — interactive behavior is smoke-tested via Playwright
-scripts invoked manually (see `/tmp/lodestar-pw/` in user's env).
+component-tested — interactive behavior is covered by the Python Playwright
+harness in `tests/playwright/` (start a dev server, then
+`python3 tests/playwright/smoke.py http://localhost:5173` for a quick check
+or `run_all.py` for the full feature suite). Conventions live in
+`AI_PLAYWRIGHT.md`.
 
 ---
 
