@@ -74,6 +74,80 @@ def test_status_filter_pills(page: Page) -> None:
     log("status filter all/ready/blocked/conflict toggles ok")
 
 
+def test_status_filter_actually_filters_scope(page: Page) -> None:
+    """`aria-pressed` flipping isn't proof the filter does anything — assert
+    the visible feature count in Module Scope matches what `matchesStatus`
+    in lib/deps.ts says, for each of READY / BLOCKED / CONFLICT.
+
+    The JS below mirrors lib/deps.ts (depStatus / isBlocked / hasConflict /
+    matchesStatus) so it stays in sync if those rules change."""
+    goto_view(page, "scope")
+    page.get_by_test_id("filter-status-all").click()
+    page.get_by_test_id("filter-ms-all").click()
+
+    counts = page.evaluate(
+        """() => {
+            const store = window.__lodestarStore.getState()
+            const project = store.project
+            const all = project.modules.flatMap((m) => m.features)
+            const idx = new Map(all.map((f) => [f.id, f]))
+            const ord = new Map(project.meta.milestones.map((m, i) => [m.id, i]))
+            const featureStatus = (f) => {
+                const tasks = f.tasks ?? []
+                if (tasks.length && tasks.every((t) => t.done)) return 'done'
+                if (tasks.some((t) => t.done)) return 'progress'
+                return 'backlog'
+            }
+            const depStatus = (feat, dep) => {
+                const target = idx.get(dep.id)
+                if (!target) return 'unknown'
+                if (featureStatus(target) === 'done') return 'done'
+                const fm = ord.get(feat.ms) ?? -1
+                const dm = ord.get(target.ms) ?? -1
+                if (dm > fm) return 'conflict'
+                if (dm === fm) return 'same'
+                return 'open'
+            }
+            const isBlocked = (f) =>
+                (f.deps ?? []).some((d) => {
+                    if (d.type === 'optional') return false
+                    const s = depStatus(f, d)
+                    return s === 'conflict' || s === 'open'
+                })
+            const hasConflict = (f) =>
+                (f.deps ?? []).some((d) => {
+                    if (d.type === 'optional') return false
+                    return depStatus(f, d) === 'conflict'
+                })
+            return {
+                total: all.length,
+                ready: all.filter(
+                    (f) => !isBlocked(f) && !hasConflict(f) && featureStatus(f) !== 'done',
+                ).length,
+                blocked: all.filter((f) => isBlocked(f) && !hasConflict(f)).length,
+                conflict: all.filter(hasConflict).length,
+            }
+        }"""
+    )
+
+    visible = lambda: page.locator('[data-testid="view-scope"] [data-feature-id]').count()
+    assert visible() == counts["total"], (visible(), counts)
+
+    for label in ("ready", "blocked", "conflict"):
+        page.get_by_test_id(f"filter-status-{label}").click()
+        page.wait_for_timeout(120)
+        got = visible()
+        assert got == counts[label], (
+            f"{label.upper()} filter shows {got} cards but matchesStatus expects {counts[label]}"
+        )
+
+    page.get_by_test_id("filter-status-all").click()
+    log(
+        f"status filter trims scope correctly: total={counts['total']}, "
+        f"ready={counts['ready']}, blocked={counts['blocked']}, conflict={counts['conflict']}"
+    )
+
+
 def test_filter_persists_across_views(page: Page) -> None:
     page.get_by_test_id("filter-status-blocked").click()
     for v in VIEWS:
@@ -200,6 +274,7 @@ TESTS = [
     test_tabs_via_keyboard_1_to_6,
     test_milestone_filter_pills,
     test_status_filter_pills,
+    test_status_filter_actually_filters_scope,
     test_filter_persists_across_views,
     test_filter_active_banner,
     test_undo_redo_disabled_state,

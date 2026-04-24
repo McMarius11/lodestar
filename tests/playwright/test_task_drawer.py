@@ -171,6 +171,45 @@ def test_task_add(page: Page) -> None:
     log(f"task add: +1 then undone ({count_before} → {count_after})")
 
 
+def test_task_add_trims_and_ignores_blank(page: Page) -> None:
+    """Store-level invariant: addTask must trim and reject whitespace-only labels.
+
+    The UI input technically accepts anything; addTask is what enforces hygiene.
+    Two cases: a padded label persists trimmed, a whitespace-only label is a no-op."""
+    fid = _open_first_feature(page)
+    before = get_project(page)
+    tasks_before = feature_by_id(before, fid)["tasks"]  # type: ignore[index]
+    inp = page.locator('[data-testid="dialog-task"] input[placeholder="Add task…"]')
+
+    # Padded label → stored as trimmed
+    padded = "  trimmed task  "
+    expected = padded.strip()
+    inp.fill(padded)
+    inp.press("Enter")
+    wait_idle(page)
+    after_pad = get_project(page)
+    new_tasks = [t for t in feature_by_id(after_pad, fid)["tasks"] if t not in tasks_before]  # type: ignore[index]
+    assert len(new_tasks) == 1, f"padded add did not grow tasks by 1: {new_tasks}"
+    assert new_tasks[0]["label"] == expected, (
+        f"label not trimmed: {new_tasks[0]['label']!r} != {expected!r}"
+    )
+
+    # Whitespace-only → silently ignored, no commit, no new task
+    count_after_pad = len(feature_by_id(after_pad, fid)["tasks"])  # type: ignore[index]
+    inp.fill("   ")
+    inp.press("Enter")
+    wait_idle(page)
+    after_blank = get_project(page)
+    assert len(feature_by_id(after_blank, fid)["tasks"]) == count_after_pad, (  # type: ignore[index]
+        "whitespace-only add unexpectedly grew tasks"
+    )
+
+    close_drawer(page)
+    page.get_by_test_id("btn-undo").click()  # undo the trimmed-add
+    wait_idle(page)
+    log("addTask trims padded labels and rejects whitespace-only input")
+
+
 def test_task_delete(page: Page) -> None:
     fid = _open_first_feature(page)
     before = get_project(page)
@@ -465,6 +504,7 @@ TESTS = [
     test_label_edit_trims_and_ignores_blank,
     test_task_toggle_commits,
     test_task_add,
+    test_task_add_trims_and_ignores_blank,
     test_task_delete,
     test_description_edit_commits_on_blur,
     test_effort_dropdown,

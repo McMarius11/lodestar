@@ -23,3 +23,6 @@ data/*.json
 # Python bytecode (playwright test harness)
 __pycache__/
 *.pyc
+
+# Visual-tour screenshot artefacts
+tests/playwright/screenshots/

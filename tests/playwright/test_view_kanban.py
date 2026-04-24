@@ -131,6 +131,73 @@ def test_right_click_card_opens_context_menu(page: Page) -> None:
     log("right-click on kanban card opens context menu")
 
 
+def test_normalize_ranks_routes_through_undo(page: Page) -> None:
+    """`normalizeKanbanRanks` must commit() so its mutation is reversible.
+
+    Float-drift from many in-column drags eventually triggers normalize, which
+    rewrites every feature.rank to a clean integer. If that runs through raw
+    set() it skips _pushHistory and the user loses their position silently
+    on Undo. Drive the action directly via the global store handle so the
+    test does not depend on dragging dozens of cards to provoke drift."""
+    goto_view(page, "kanban")
+    # Pick the first feature in the first column and stamp a float rank,
+    # then snapshot ranks before normalize.
+    fid = page.locator('[data-testid^="kanban-col-"] [data-feature-id]').first.get_attribute(
+        "data-feature-id"
+    )
+    assert fid, "no kanban card present"
+    snapshot_before = page.evaluate(
+        """(fid) => {
+            const store = window.__lodestarStore.getState()
+            const all = store.project.modules.flatMap((m) => m.features)
+            // Stamp a float rank so the field is non-integer; then capture the
+            // current rank map.
+            const target = all.find((f) => f.id === fid)
+            const drifted = (target?.rank ?? 0) + 0.5
+            store.updateFeature(fid, { rank: drifted })
+            const fresh = window.__lodestarStore.getState().project.modules.flatMap(
+                (m) => m.features
+            )
+            return Object.fromEntries(fresh.map((f) => [f.id, f.rank ?? null]))
+        }""",
+        fid,
+    )
+    # The drifted rank should be the float we wrote
+    assert isinstance(snapshot_before[fid], float) and snapshot_before[fid] % 1 != 0, snapshot_before[fid]
+
+    page.evaluate("() => window.__lodestarStore.getState().normalizeKanbanRanks()")
+    wait_idle(page)
+    snapshot_after = page.evaluate(
+        """() => {
+            const all = window.__lodestarStore.getState().project.modules.flatMap(
+                (m) => m.features
+            )
+            return Object.fromEntries(all.map((f) => [f.id, f.rank ?? null]))
+        }"""
+    )
+    # All ranks should now be plain integers
+    for fid_, rank in snapshot_after.items():
+        assert rank is None or float(rank).is_integer(), f"{fid_}: {rank!r}"
+
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    snapshot_undone = page.evaluate(
+        """() => {
+            const all = window.__lodestarStore.getState().project.modules.flatMap(
+                (m) => m.features
+            )
+            return Object.fromEntries(all.map((f) => [f.id, f.rank ?? null]))
+        }"""
+    )
+    assert snapshot_undone[fid] == snapshot_before[fid], (
+        f"undo did not restore drifted rank: {snapshot_before[fid]} → {snapshot_undone[fid]}"
+    )
+    # Revert the synthetic drift to leave state clean for follow-up tests
+    page.get_by_test_id("btn-undo").click()
+    wait_idle(page)
+    log("normalizeKanbanRanks committed → undo restores pre-normalize ranks")
+
+
 TESTS = [
     test_view_mounts_with_three_columns,
     test_dnd_between_columns_sets_task_done,
@@ -138,6 +205,7 @@ TESTS = [
     test_sort_modes_cycle,
     test_card_click_opens_drawer,
     test_right_click_card_opens_context_menu,
+    test_normalize_ranks_routes_through_undo,
 ]
 
 
