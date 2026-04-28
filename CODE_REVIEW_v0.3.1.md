@@ -99,17 +99,21 @@ unterschiedlich.
 nur `contextBridge`/`ipcRenderer`/`webUtils` — alle drei sind
 sandbox-kompatibel, Smoke-Test passt.
 
-### [minor] tsconfig — `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`
-**Datei:** `tsconfig.json:13`
-`strict: true` ist gesetzt, aber zwei zusätzliche Flags fangen
-Real-World-Bugs (Off-by-one bei Array-Access, falsche
-`x?: T` vs. `x: T | undefined`-Semantik).
+### [minor] ✅ tsconfig — `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`
+**Datei:** `tsconfig.json:17`
+`strict: true` ist gesetzt, beide Flags zusätzlich aktiv. Fängt
+Off-by-one-Bugs bei Array-Access und macht den Unterschied
+zwischen `x?: T` (Property fehlt) und `x: T | undefined`
+(Property ist da, aber undefined) explizit.
 
-**Status:** offen. Ein erster Versuch ergab **88 neue
-TypeScript-Errors**, davon viele in Test-Files (`schema.test.ts`,
-`useProjectStore.test.ts`, `recentFiles.test.ts`) und im
-`persistence.ts` (Project-Type-Mismatch beim `meta.today`-Feld).
-Verdient einen eigenen Pass.
+**Fix:** Initial 88 Errors. Production-Code (`store`,
+`persistence`, `components`, `hooks`, `views`) gefixt mit
+genuinen Guards/Narrowings. Test-Files gefixt mit `!`-Asserts
+auf bekannten Indices. `Project.meta.today`/`mindmapPositions`
+und `Feature.description`/`rank` in `types.ts` explizit auf
+`T | undefined` gesetzt, damit Zod's `.optional()`-Inferenz
+zur Project-Typed-Annotation passt. Alle 96 Vitest-Tests bleiben
+grün.
 
 ### [minor] Kein ESLint im Repo
 **Datei:** `package.json`
@@ -231,13 +235,12 @@ Stichproben-Verifikation, alle ✅:
 
 ## Status / nächste Schritte
 
-In dieser Session geschlossen:
+In dieser Audit-Runde geschlossen:
 - 4 Major-Bugs (A1–A4) — neue Vitest-Coverage in
   `useProjectStore.test.ts` (+11 Tests, gesamt 96)
-- 1 Best-Practice-Quick-Win (B1)
+- 2 Best-Practice-Quick-Wins (B1 webPreferences, B2 tsconfig)
 
 Offen, in eigenen Passes anzugehen:
-- tsconfig-Hardening (88 Errors, Test-Files dominieren)
 - ESLint einrichten + CI-Step
 - Playwright-Suite in CI
 - Electron-Major-Update auf 35

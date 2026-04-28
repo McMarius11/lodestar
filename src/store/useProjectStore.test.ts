@@ -402,32 +402,32 @@ describe('useProjectStore task label hygiene', () => {
   it('addTask ignores whitespace-only labels', async () => {
     const { store, featureId } = await seededStore()
     store.getState().addTask(featureId, '   ')
-    const tasks = store.getState().project.modules[0].features.find((f) => f.id === featureId)?.tasks
+    const tasks = store.getState().project.modules[0]!.features.find((f) => f.id === featureId)?.tasks
     expect(tasks).toHaveLength(0)
   })
 
   it('addTask trims padded labels before persisting', async () => {
     const { store, featureId } = await seededStore()
     store.getState().addTask(featureId, '  ship it  ')
-    const tasks = store.getState().project.modules[0].features.find((f) => f.id === featureId)?.tasks
+    const tasks = store.getState().project.modules[0]!.features.find((f) => f.id === featureId)?.tasks
     expect(tasks).toHaveLength(1)
-    expect(tasks?.[0].label).toBe('ship it')
+    expect(tasks?.[0]!.label).toBe('ship it')
   })
 
   it('updateTask trims padded labels and rejects whitespace-only renames', async () => {
     const { store, featureId } = await seededStore()
     store.getState().addTask(featureId, 'original')
-    const feat = store.getState().project.modules[0].features.find((f) => f.id === featureId)
-    const taskId = feat!.tasks[0].id
+    const feat = store.getState().project.modules[0]!.features.find((f) => f.id === featureId)
+    const taskId = feat!.tasks[0]!.id
 
     store.getState().updateTask(featureId, taskId, { label: '   ' })
     expect(
-      store.getState().project.modules[0].features.find((f) => f.id === featureId)?.tasks[0].label,
+      store.getState().project.modules[0]!.features.find((f) => f.id === featureId)?.tasks[0]!.label,
     ).toBe('original')
 
     store.getState().updateTask(featureId, taskId, { label: '  renamed  ' })
     expect(
-      store.getState().project.modules[0].features.find((f) => f.id === featureId)?.tasks[0].label,
+      store.getState().project.modules[0]!.features.find((f) => f.id === featureId)?.tasks[0]!.label,
     ).toBe('renamed')
   })
 })
@@ -466,14 +466,14 @@ describe('useProjectStore kanban rank normalization', () => {
 
     const before = store
       .getState()
-      .project.modules[0].features.filter((f) => f.id === a || f.id === b)
+      .project.modules[0]!.features.filter((f) => f.id === a || f.id === b)
       .map((f) => ({ id: f.id, rank: f.rank }))
 
     store.getState().normalizeKanbanRanks()
 
     const afterNormalize = store
       .getState()
-      .project.modules[0].features.filter((f) => f.id === a || f.id === b)
+      .project.modules[0]!.features.filter((f) => f.id === a || f.id === b)
       .map((f) => ({ id: f.id, rank: f.rank }))
     expect(afterNormalize).not.toEqual(before)
     expect(afterNormalize.every((f) => Number.isInteger(f.rank))).toBe(true)
@@ -482,7 +482,7 @@ describe('useProjectStore kanban rank normalization', () => {
 
     const afterUndo = store
       .getState()
-      .project.modules[0].features.filter((f) => f.id === a || f.id === b)
+      .project.modules[0]!.features.filter((f) => f.id === a || f.id === b)
       .map((f) => ({ id: f.id, rank: f.rank }))
     expect(afterUndo).toEqual(before)
   })
@@ -523,7 +523,7 @@ describe('useProjectStore renameFeatureId', () => {
     const { store, a } = await seeded()
     expect(store.getState().renameFeatureId(a, '')).toEqual({ ok: false, reason: 'empty' })
     expect(store.getState().renameFeatureId(a, '   ')).toEqual({ ok: false, reason: 'empty' })
-    expect(store.getState().project.modules[0].features.find((f) => f.id === a)).toBeTruthy()
+    expect(store.getState().project.modules[0]!.features.find((f) => f.id === a)).toBeTruthy()
   })
 
   it('is a no-op when the new id matches the old one', async () => {
@@ -536,7 +536,7 @@ describe('useProjectStore renameFeatureId', () => {
   it('rejects ids already used by another feature', async () => {
     const { store, a, b } = await seeded()
     expect(store.getState().renameFeatureId(a, b)).toEqual({ ok: false, reason: 'duplicate' })
-    expect(store.getState().project.modules[0].features.find((f) => f.id === a)).toBeTruthy()
+    expect(store.getState().project.modules[0]!.features.find((f) => f.id === a)).toBeTruthy()
   })
 
   it('rejects unknown source ids', async () => {
@@ -551,7 +551,7 @@ describe('useProjectStore renameFeatureId', () => {
     const { store, a, b, c } = await seeded()
     const res = store.getState().renameFeatureId(a, 'alpha-v2')
     expect(res).toEqual({ ok: true })
-    const feats = store.getState().project.modules[0].features
+    const feats = store.getState().project.modules[0]!.features
     expect(feats.find((f) => f.id === 'alpha-v2')).toBeTruthy()
     expect(feats.find((f) => f.id === a)).toBeUndefined()
     const bf = feats.find((f) => f.id === b)!
@@ -590,7 +590,7 @@ describe('useProjectStore renameFeatureId', () => {
     store.getState().renameFeatureId(a, 'alpha-v2')
     expect(store.getState().history.length).toBe(historyBefore + 1)
     store.getState().undo()
-    const feats = store.getState().project.modules[0].features
+    const feats = store.getState().project.modules[0]!.features
     expect(feats.find((f) => f.id === a)).toBeTruthy()
     const bf = feats.find((f) => f.id === b)!
     expect(bf.deps.map((d) => d.id)).toEqual([a])
@@ -625,7 +625,7 @@ describe('useProjectStore renameModuleId', () => {
     const existing = store.getState().project.modules.map((m) => m.id)
     expect(existing).toContain('core')
     expect(store.getState().renameModuleId('core', '')).toEqual({ ok: false, reason: 'empty' })
-    expect(store.getState().renameModuleId('core', existing[1])).toEqual({
+    expect(store.getState().renameModuleId('core', existing[1]!)).toEqual({
       ok: false,
       reason: 'duplicate',
     })
@@ -677,18 +677,18 @@ describe('useProjectStore reorderTaskInFeature', () => {
     const { store, fid } = await seeded()
     const tasks = store
       .getState()
-      .project.modules[0].features.find((f) => f.id === fid)!.tasks
-    const thirdId = tasks[2].id
+      .project.modules[0]!.features.find((f) => f.id === fid)!.tasks
+    const thirdId = tasks[2]!.id
     store.getState().reorderTaskInFeature(fid, thirdId, 0)
     const labelsNow = store
       .getState()
-      .project.modules[0].features.find((f) => f.id === fid)!
+      .project.modules[0]!.features.find((f) => f.id === fid)!
       .tasks.map((t) => t.label)
     expect(labelsNow).toEqual(['three', 'one', 'two'])
     store.getState().undo()
     const labelsAfterUndo = store
       .getState()
-      .project.modules[0].features.find((f) => f.id === fid)!
+      .project.modules[0]!.features.find((f) => f.id === fid)!
       .tasks.map((t) => t.label)
     expect(labelsAfterUndo).toEqual(['one', 'two', 'three'])
   })
@@ -697,11 +697,11 @@ describe('useProjectStore reorderTaskInFeature', () => {
     const { store, fid } = await seeded()
     const firstId = store
       .getState()
-      .project.modules[0].features.find((f) => f.id === fid)!.tasks[0].id
+      .project.modules[0]!.features.find((f) => f.id === fid)!.tasks[0]!.id
     store.getState().reorderTaskInFeature(fid, firstId, 999)
     const labels = store
       .getState()
-      .project.modules[0].features.find((f) => f.id === fid)!
+      .project.modules[0]!.features.find((f) => f.id === fid)!
       .tasks.map((t) => t.label)
     expect(labels).toEqual(['two', 'three', 'one'])
   })
@@ -770,7 +770,7 @@ describe('useProjectStore deleteFeature', () => {
   it('drops incoming deps when a feature is deleted', async () => {
     const { store, a, b } = await seeded()
     store.getState().deleteFeature(a)
-    const feats = store.getState().project.modules[0].features
+    const feats = store.getState().project.modules[0]!.features
     expect(feats.find((f) => f.id === a)).toBeUndefined()
     const bf = feats.find((f) => f.id === b)!
     expect(bf.deps).toEqual([])
@@ -810,7 +810,7 @@ describe('useProjectStore deleteFeature', () => {
     store.getState().deleteFeature(a)
     expect(store.getState().history.length).toBe(historyBefore + 1)
     store.getState().undo()
-    const feats = store.getState().project.modules[0].features
+    const feats = store.getState().project.modules[0]!.features
     expect(feats.find((f) => f.id === a)).toBeTruthy()
     const bf = feats.find((f) => f.id === b)!
     expect(bf.deps.map((d) => d.id)).toEqual([a])
@@ -849,7 +849,7 @@ describe('useProjectStore deleteModule', () => {
     store.getState().deleteModule('core')
     const mods = store.getState().project.modules
     expect(mods.map((m) => m.id)).toEqual(['storage'])
-    const cf = mods[0].features.find((f) => f.id === c)!
+    const cf = mods[0]!.features.find((f) => f.id === c)!
     expect(cf.deps.find((d) => d.id === a)).toBeUndefined()
   })
 
@@ -916,7 +916,7 @@ describe('useProjectStore deleteMilestone', () => {
   it('reassigns orphaned features to the first remaining milestone', async () => {
     const { store, a } = await seeded()
     store.getState().deleteMilestone('v0.1')
-    const af = store.getState().project.modules[0].features.find((f) => f.id === a)!
+    const af = store.getState().project.modules[0]!.features.find((f) => f.id === a)!
     expect(af.ms).toBe('v0.2')
     const milestones = store.getState().project.meta.milestones.map((m) => m.id)
     expect(milestones).toEqual(['v0.2'])
@@ -940,7 +940,7 @@ describe('useProjectStore deleteMilestone', () => {
     const { store, a } = await seeded()
     store.getState().deleteMilestone('v0.2')
     store.getState().deleteMilestone('v0.1')
-    const af = store.getState().project.modules[0].features.find((f) => f.id === a)
+    const af = store.getState().project.modules[0]!.features.find((f) => f.id === a)
     expect(af).toBeTruthy()
     expect(store.getState().project.meta.milestones).toEqual([])
   })

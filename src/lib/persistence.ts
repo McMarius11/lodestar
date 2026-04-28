@@ -4,7 +4,12 @@ import { migrate } from '@/schema'
 const LS_KEY = 'projekt-planner:project:v1'
 
 export type LoadedProject =
-  | { project: Project; source: 'disk' | 'localStorage'; status: 'ok'; path?: string }
+  | {
+      project: Project
+      source: 'disk' | 'localStorage'
+      status: 'ok'
+      path?: string | undefined
+    }
   | { project: null; source: 'none'; status: 'empty' }
   | {
       project: Project
@@ -114,7 +119,7 @@ export async function exportProject(project: Project): Promise<string | null> {
   return 'download'
 }
 
-export type ImportedProject = { project: Project; path?: string }
+export type ImportedProject = { project: Project; path?: string | undefined }
 
 export async function importProject(): Promise<ImportedProject | null> {
   if (hasElectron()) {

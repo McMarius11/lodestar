@@ -45,7 +45,7 @@ export function MilestoneEditor({ onClose }: { onClose: () => void }) {
     }
     const target = prompt(
       `Milestone "${id}" is used by ${n} feature(s).\nReassign them to which milestone?\nAvailable: ${remaining.map((m) => m.id).join(', ')}`,
-      remaining[0].id,
+      remaining[0]!.id,
     )
     const trimmedTarget = target?.trim()
     if (!trimmedTarget || !remaining.some((m) => m.id === trimmedTarget)) return

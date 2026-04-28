@@ -110,8 +110,8 @@ export function Kanban() {
     // detect float-drift and renormalize
     const nextList = buckets[col]
     for (let i = 1; i < nextList.length; i++) {
-      const a = nextList[i - 1].rank
-      const b = nextList[i].rank
+      const a = nextList[i - 1]?.rank
+      const b = nextList[i]?.rank
       if (typeof a === 'number' && typeof b === 'number' && Math.abs(b - a) < 0.001) {
         normalizeKanbanRanks()
         break

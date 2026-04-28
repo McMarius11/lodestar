@@ -77,7 +77,10 @@ type Actions = {
   openDefaultProject: () => Promise<boolean>
   openProjectFromPath: (path: string) => Promise<boolean>
   openProjectFromDialog: () => Promise<boolean>
-  openProjectFromText: (text: string, opts?: { name?: string; path?: string }) => boolean
+  openProjectFromText: (
+    text: string,
+    opts?: { name?: string | undefined; path?: string | undefined },
+  ) => boolean
   setActiveView: (v: ViewId) => void
   setActiveMilestone: (ms: string | 'all') => void
   setActiveStatus: (s: StatusFilter) => void
@@ -558,7 +561,7 @@ export const useProjectStore = create<State & Actions>()(
         const idx = m.features.findIndex((f) => f.id === featureId)
         if (idx >= 0) {
           sourceModuleId = m.id
-          sourceFeature = m.features[idx]
+          sourceFeature = m.features[idx] ?? null
           sourceIndex = idx
           break
         }
@@ -681,13 +684,13 @@ export const useProjectStore = create<State & Actions>()(
             f.tasks.push({ id: newId('t'), label: 'Kickoff', done: true })
             f.tasks.push({ id: newId('t'), label: 'Next step', done: false })
           } else if (f.tasks.length === 1) {
-            f.tasks[0].done = true
+            f.tasks[0]!.done = true
             f.tasks.push({ id: newId('t'), label: 'Next step', done: false })
           } else {
             const doneCount = f.tasks.filter((t) => t.done).length
-            if (doneCount === 0) f.tasks[0].done = true
+            if (doneCount === 0) f.tasks[0]!.done = true
             else if (doneCount === f.tasks.length)
-              f.tasks[f.tasks.length - 1].done = false
+              f.tasks[f.tasks.length - 1]!.done = false
           }
         }
         if (typeof rank === 'number') f.rank = rank
@@ -699,11 +702,11 @@ export const useProjectStore = create<State & Actions>()(
       const byStatus: Record<string, Feature[]> = { backlog: [], progress: [], done: [] }
       for (const m of project.modules) {
         for (const f of m.features) {
-          byStatus[featureStatus(f)].push(f)
+          byStatus[featureStatus(f)]!.push(f)
         }
       }
       for (const key of Object.keys(byStatus)) {
-        byStatus[key].sort((a, b) => {
+        byStatus[key]!.sort((a, b) => {
           const ar = a.rank ?? Number.POSITIVE_INFINITY
           const br = b.rank ?? Number.POSITIVE_INFINITY
           return ar - br
@@ -711,7 +714,7 @@ export const useProjectStore = create<State & Actions>()(
       }
       commit((s) => {
         for (const key of Object.keys(byStatus)) {
-          byStatus[key].forEach((ref, i) => {
+          byStatus[key]!.forEach((ref, i) => {
             const f = findFeature(s.project, ref.id)
             if (f) f.rank = i + 1
           })
@@ -911,7 +914,7 @@ export const useProjectStore = create<State & Actions>()(
       const project = get().project
       const idx = project.modules.findIndex((m) => m.id === moduleId)
       if (idx < 0) return null
-      const source = project.modules[idx]
+      const source = project.modules[idx]!
       const newModId = slugId(`${source.label} copy`)
       const clone: Module = {
         id: newModId,
@@ -1024,7 +1027,7 @@ export const useProjectStore = create<State & Actions>()(
     undo: () => {
       const { history, project } = get()
       if (history.length === 0) return
-      const prev = history[history.length - 1]
+      const prev = history[history.length - 1]!
       set((s) => {
         s.future.push(JSON.parse(JSON.stringify(project)))
         s.project = prev
@@ -1036,7 +1039,7 @@ export const useProjectStore = create<State & Actions>()(
     redo: () => {
       const { future, project } = get()
       if (future.length === 0) return
-      const next = future[future.length - 1]
+      const next = future[future.length - 1]!
       set((s) => {
         s.history.push(JSON.parse(JSON.stringify(project)))
         s.project = next

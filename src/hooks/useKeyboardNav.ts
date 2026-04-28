@@ -67,9 +67,10 @@ export function useKeyboardNav() {
       if (modalOpen) return
 
       // View switching 1..6
-      if (viewMap[e.key]) {
+      const mapped = viewMap[e.key]
+      if (mapped) {
         e.preventDefault()
-        setActiveView(viewMap[e.key])
+        setActiveView(mapped)
         return
       }
 
@@ -91,16 +92,16 @@ export function useKeyboardNav() {
           if (visibleIds.length === 0) return
           e.preventDefault()
           const i = cursorId ? visibleIds.indexOf(cursorId) : -1
-          const next = visibleIds[Math.min(i + 1, visibleIds.length - 1)]
-          setCursorId(next ?? visibleIds[0])
+          const next = visibleIds[Math.min(i + 1, visibleIds.length - 1)] ?? visibleIds[0]
+          if (next) setCursorId(next)
           return
         }
         if (e.key === 'k' || e.key === 'ArrowUp') {
           if (visibleIds.length === 0) return
           e.preventDefault()
           const i = cursorId ? visibleIds.indexOf(cursorId) : 0
-          const next = visibleIds[Math.max(i - 1, 0)]
-          setCursorId(next ?? visibleIds[0])
+          const next = visibleIds[Math.max(i - 1, 0)] ?? visibleIds[0]
+          if (next) setCursorId(next)
           return
         }
         if (e.key === 'Enter' && cursorId) {

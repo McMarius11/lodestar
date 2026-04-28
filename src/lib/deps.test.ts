@@ -40,35 +40,35 @@ describe('depStatus', () => {
   it('returns "unknown" when target feature does not exist', () => {
     const a = mkFeat({ id: 'a', deps: [{ id: 'ghost', reason: '', type: 'build' }] })
     const p = mkProject([a])
-    expect(depStatus(p, a, a.deps[0])).toBe('unknown')
+    expect(depStatus(p, a, a.deps[0]!)).toBe('unknown')
   })
 
   it('returns "done" when target feature is 100% done', () => {
     const b = mkFeat({ id: 'b', ms: 'v0.1', tasks: [{ id: 't', label: 'x', done: true }] })
     const a = mkFeat({ id: 'a', ms: 'v0.2', deps: [{ id: 'b', reason: '', type: 'build' }] })
     const p = mkProject([a, b])
-    expect(depStatus(p, a, a.deps[0])).toBe('done')
+    expect(depStatus(p, a, a.deps[0]!)).toBe('done')
   })
 
   it('returns "conflict" when dep is in a later milestone', () => {
     const b = mkFeat({ id: 'b', ms: 'v0.3' })
     const a = mkFeat({ id: 'a', ms: 'v0.1', deps: [{ id: 'b', reason: '', type: 'build' }] })
     const p = mkProject([a, b])
-    expect(depStatus(p, a, a.deps[0])).toBe('conflict')
+    expect(depStatus(p, a, a.deps[0]!)).toBe('conflict')
   })
 
   it('returns "same" when dep is in the same milestone', () => {
     const b = mkFeat({ id: 'b', ms: 'v0.1' })
     const a = mkFeat({ id: 'a', ms: 'v0.1', deps: [{ id: 'b', reason: '', type: 'build' }] })
     const p = mkProject([a, b])
-    expect(depStatus(p, a, a.deps[0])).toBe('same')
+    expect(depStatus(p, a, a.deps[0]!)).toBe('same')
   })
 
   it('returns "open" when dep is in an earlier milestone but not done', () => {
     const b = mkFeat({ id: 'b', ms: 'v0.1' })
     const a = mkFeat({ id: 'a', ms: 'v0.2', deps: [{ id: 'b', reason: '', type: 'build' }] })
     const p = mkProject([a, b])
-    expect(depStatus(p, a, a.deps[0])).toBe('open')
+    expect(depStatus(p, a, a.deps[0]!)).toBe('open')
   })
 })
 

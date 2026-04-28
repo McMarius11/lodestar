@@ -263,6 +263,7 @@ function firstEnabled(items: CtxMenuItem[], from: number, dir: 1 | -1): number {
   for (let step = 0; step < n; step++) {
     const idx = ((from + step * dir) % n + n) % n
     const it = items[idx]
+    if (!it) continue
     if (it.kind === 'action' && !it.disabled) return idx
     if (it.kind === 'submenu' && !it.disabled) return idx
   }

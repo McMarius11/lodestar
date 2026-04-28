@@ -38,14 +38,14 @@ describe('migrate', () => {
   it('adds an empty description when missing (v1 → v2)', () => {
     const v1 = { ...minimal, meta: { ...minimal.meta, schemaVersion: 1 } }
     const out = migrate(v1)
-    expect(out.modules[0].features[0].description).toBe('')
+    expect(out.modules[0]!.features[0]!.description).toBe('')
   })
 
   it('preserves existing descriptions', () => {
     const input = JSON.parse(JSON.stringify(minimal))
     input.modules[0].features[0].description = 'Hello **world**'
     const out = migrate(input)
-    expect(out.modules[0].features[0].description).toBe('Hello **world**')
+    expect(out.modules[0]!.features[0]!.description).toBe('Hello **world**')
   })
 
   it('roundtrips v2 without loss', () => {
@@ -63,14 +63,14 @@ describe('migrate', () => {
     input.meta.schemaVersion = 3
     input.modules[0].features[0].rank = 2.5
     const out = migrate(input)
-    expect(out.modules[0].features[0].rank).toBe(2.5)
+    expect(out.modules[0]!.features[0]!.rank).toBe(2.5)
   })
 
   it('drops non-finite rank values', () => {
     const input = JSON.parse(JSON.stringify(minimal))
     input.modules[0].features[0].rank = Number.NaN
     const out = migrate(input)
-    expect(out.modules[0].features[0].rank).toBeUndefined()
+    expect(out.modules[0]!.features[0]!.rank).toBeUndefined()
   })
 
   it('migrates legacy milestones as string[] with milestoneLabels map', () => {
@@ -108,8 +108,8 @@ describe('migrate', () => {
     delete input.modules[0].features[0].ganttStart
     delete input.modules[0].features[0].ganttEnd
     const out = migrate(input)
-    expect(out.modules[0].features[0].ganttStart).toBe(0)
-    expect(out.modules[0].features[0].ganttEnd).toBe(1)
+    expect(out.modules[0]!.features[0]!.ganttStart).toBe(0)
+    expect(out.modules[0]!.features[0]!.ganttEnd).toBe(1)
   })
 
   it('defaults dep.type to build when missing', () => {
@@ -125,7 +125,7 @@ describe('migrate', () => {
       tasks: [],
     })
     const out = migrate(input)
-    expect(out.modules[0].features[1].deps[0].type).toBe('build')
+    expect(out.modules[0]!.features[1]!.deps[0]!.type).toBe('build')
   })
 })
 

@@ -17,14 +17,14 @@ export type Dep = {
 export type Feature = {
   id: string
   label: string
-  description?: string
+  description?: string | undefined
   effort: Effort
   ms: string
   ganttStart: number
   ganttEnd: number
   deps: Dep[]
   tasks: Task[]
-  rank?: number
+  rank?: number | undefined
 }
 
 export type Module = {
@@ -45,8 +45,8 @@ export type ProjectMeta = {
   version: string
   schemaVersion: number
   milestones: Milestone[]
-  today?: number
-  mindmapPositions?: Record<string, { x: number; y: number }>
+  today?: number | undefined
+  mindmapPositions?: Record<string, { x: number; y: number }> | undefined
 }
 
 export type Project = {

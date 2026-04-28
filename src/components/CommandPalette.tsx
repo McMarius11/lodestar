@@ -260,7 +260,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
           if (idx < 0) return { c, score: -1 }
           score += 1000 - idx
         }
-        if (hay.startsWith(tokens[0])) score += 500
+        if (tokens[0] && hay.startsWith(tokens[0])) score += 500
         return { c, score }
       })
       .filter((x) => x.score > 0)

@@ -60,7 +60,7 @@ describe('recentFiles pure transforms', () => {
     }))
     const out = upsertRecent(list, { name: 'new', path: '/p/new.json', when: 999 }, 5)
     expect(out).toHaveLength(5)
-    expect(out[0].path).toBe('/p/new.json')
+    expect(out[0]!.path).toBe('/p/new.json')
     expect(out.find((r) => r.path === '/p/f4.json')).toBeUndefined()
     expect(out.find((r) => r.path === '/p/f0.json')).toBeDefined()
   })
