@@ -139,6 +139,8 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
       zoomFactor: 1,
     },
   })
@@ -179,7 +181,9 @@ function stopWatcher(): void {
 
 ipcMain.handle('project:load', async (_evt, targetPath?: unknown) => {
   const explicit = typeof targetPath === 'string' && targetPath ? targetPath : null
-  const target = explicit ?? dataFile()
+  const safeExplicit = explicit ? await resolveProjectPath(explicit) : null
+  if (explicit && !safeExplicit) return { ok: false, error: 'INVALID_PATH' }
+  const target = safeExplicit ?? dataFile()
   if (!explicit) await ensureDataFile()
   if (!existsSync(target)) {
     return { ok: false, error: 'NOT_FOUND' }
@@ -197,7 +201,9 @@ ipcMain.handle(
   'project:save',
   async (_evt, payload: unknown, targetPath?: unknown) => {
     const explicit = typeof targetPath === 'string' && targetPath ? targetPath : null
-    const target = explicit ?? dataFile()
+    const safeExplicit = explicit ? await resolveProjectPath(explicit) : null
+    if (explicit && !safeExplicit) return { ok: false, error: 'INVALID_PATH' }
+    const target = safeExplicit ?? dataFile()
     if (!explicit) await ensureDataFile()
     try {
       writingOwn = true
@@ -252,14 +258,35 @@ ipcMain.handle('project:import', async () => {
   }
 })
 
+async function resolveProjectPath(input: string): Promise<string | null> {
+  // Defense-in-depth for `project:openPath`: a misbehaving renderer (XSS via
+  // markdown, prepared sample, etc.) shouldn't be able to coax the main
+  // process into reading arbitrary files. We resolve symlinks via realpath,
+  // require a `.json` extension, and block obvious system paths. Legitimate
+  // use cases (user drops a file from anywhere on disk, opens a recent file)
+  // still work.
+  let real: string
+  try {
+    real = await fs.realpath(input)
+  } catch {
+    real = path.resolve(input)
+  }
+  if (path.extname(real).toLowerCase() !== '.json') return null
+  const blocked = ['/etc/', '/proc/', '/sys/', '/dev/', '/boot/']
+  if (blocked.some((p) => real.startsWith(p))) return null
+  return real
+}
+
 ipcMain.handle('project:openPath', async (_evt, filePath: unknown) => {
   if (typeof filePath !== 'string' || !filePath) {
     return { ok: false, error: 'INVALID_PATH' }
   }
-  if (!existsSync(filePath)) return { ok: false, error: 'NOT_FOUND' }
+  const safe = await resolveProjectPath(filePath)
+  if (!safe) return { ok: false, error: 'INVALID_PATH' }
+  if (!existsSync(safe)) return { ok: false, error: 'NOT_FOUND' }
   try {
-    const raw = await fs.readFile(filePath, 'utf-8')
-    return { ok: true, data: JSON.parse(raw), path: filePath }
+    const raw = await fs.readFile(safe, 'utf-8')
+    return { ok: true, data: JSON.parse(raw), path: safe }
   } catch (err) {
     return { ok: false, error: String(err) }
   }

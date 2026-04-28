@@ -741,3 +741,207 @@ describe('useProjectStore clearFilters', () => {
     expect(store.getState().history.length).toBe(historyBefore)
   })
 })
+
+describe('useProjectStore deleteFeature', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    saveProjectMock.mockReset().mockResolvedValue(undefined)
+    subscribeExternalChangeMock.mockReset().mockImplementation(() => () => {})
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function seeded() {
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+    })
+    const a = store.getState().addFeature('core', { label: 'Alpha' })
+    const b = store.getState().addFeature('core', { label: 'Beta' })
+    store.getState().addDep(b, { id: a, reason: 'needs', type: 'build' })
+    return { store, a, b }
+  }
+
+  it('drops incoming deps when a feature is deleted', async () => {
+    const { store, a, b } = await seeded()
+    store.getState().deleteFeature(a)
+    const feats = store.getState().project.modules[0].features
+    expect(feats.find((f) => f.id === a)).toBeUndefined()
+    const bf = feats.find((f) => f.id === b)!
+    expect(bf.deps).toEqual([])
+  })
+
+  it('clears UI state that pointed at the deleted feature', async () => {
+    const { store, a } = await seeded()
+    store.getState().openDrawer(a)
+    store.getState().setCursorFeature(a)
+    store.getState().openDepEditor(a, a, { x: 0, y: 0 })
+    store.setState((s) => {
+      s.mindmapOverrides[a] = { x: 7, y: 8 }
+      s.project.meta.mindmapPositions = { [a]: { x: 1, y: 2 } }
+    })
+    store.getState().deleteFeature(a)
+    expect(store.getState().drawerFeatureId).toBeNull()
+    expect(store.getState().cursorFeatureId).toBeNull()
+    expect(store.getState().depEditor).toBeNull()
+    expect(store.getState().mindmapOverrides[a]).toBeUndefined()
+    expect(store.getState().project.meta.mindmapPositions?.[a]).toBeUndefined()
+  })
+
+  it('leaves unrelated UI state alone', async () => {
+    const { store, a, b } = await seeded()
+    store.getState().setCursorFeature(b)
+    store.setState((s) => {
+      s.mindmapOverrides[b] = { x: 9, y: 9 }
+    })
+    store.getState().deleteFeature(a)
+    expect(store.getState().cursorFeatureId).toBe(b)
+    expect(store.getState().mindmapOverrides[b]).toEqual({ x: 9, y: 9 })
+  })
+
+  it('is undoable as a single history frame', async () => {
+    const { store, a, b } = await seeded()
+    const historyBefore = store.getState().history.length
+    store.getState().deleteFeature(a)
+    expect(store.getState().history.length).toBe(historyBefore + 1)
+    store.getState().undo()
+    const feats = store.getState().project.modules[0].features
+    expect(feats.find((f) => f.id === a)).toBeTruthy()
+    const bf = feats.find((f) => f.id === b)!
+    expect(bf.deps.map((d) => d.id)).toEqual([a])
+  })
+})
+
+describe('useProjectStore deleteModule', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    saveProjectMock.mockReset().mockResolvedValue(undefined)
+    subscribeExternalChangeMock.mockReset().mockImplementation(() => () => {})
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function seeded() {
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+    })
+    store.getState().addModule({ id: 'storage', label: 'Storage' })
+    const a = store.getState().addFeature('core', { label: 'Alpha' })
+    const b = store.getState().addFeature('core', { label: 'Beta' })
+    const c = store.getState().addFeature('storage', { label: 'Gamma' })
+    store.getState().addDep(c, { id: a, reason: 'needs', type: 'build' })
+    return { store, a, b, c }
+  }
+
+  it('removes the module and prunes incoming deps from surviving features', async () => {
+    const { store, a, c } = await seeded()
+    store.getState().deleteModule('core')
+    const mods = store.getState().project.modules
+    expect(mods.map((m) => m.id)).toEqual(['storage'])
+    const cf = mods[0].features.find((f) => f.id === c)!
+    expect(cf.deps.find((d) => d.id === a)).toBeUndefined()
+  })
+
+  it('clears UI state that pointed at any feature in the deleted module', async () => {
+    const { store, a, b } = await seeded()
+    store.getState().openDrawer(a)
+    store.getState().setCursorFeature(b)
+    store.getState().openDepEditor(a, b, { x: 0, y: 0 })
+    store.setState((s) => {
+      s.mindmapOverrides[a] = { x: 1, y: 1 }
+      s.mindmapOverrides[b] = { x: 2, y: 2 }
+      s.project.meta.mindmapPositions = {
+        [a]: { x: 3, y: 3 },
+        [b]: { x: 4, y: 4 },
+      }
+    })
+    store.getState().deleteModule('core')
+    expect(store.getState().drawerFeatureId).toBeNull()
+    expect(store.getState().cursorFeatureId).toBeNull()
+    expect(store.getState().depEditor).toBeNull()
+    expect(store.getState().mindmapOverrides[a]).toBeUndefined()
+    expect(store.getState().mindmapOverrides[b]).toBeUndefined()
+    expect(store.getState().project.meta.mindmapPositions?.[a]).toBeUndefined()
+    expect(store.getState().project.meta.mindmapPositions?.[b]).toBeUndefined()
+  })
+
+  it('leaves UI state for features in other modules untouched', async () => {
+    const { store, c } = await seeded()
+    store.getState().setCursorFeature(c)
+    store.setState((s) => {
+      s.mindmapOverrides[c] = { x: 5, y: 5 }
+    })
+    store.getState().deleteModule('core')
+    expect(store.getState().cursorFeatureId).toBe(c)
+    expect(store.getState().mindmapOverrides[c]).toEqual({ x: 5, y: 5 })
+  })
+})
+
+describe('useProjectStore deleteMilestone', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    saveProjectMock.mockReset().mockResolvedValue(undefined)
+    subscribeExternalChangeMock.mockReset().mockImplementation(() => () => {})
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function seeded() {
+    const store = await freshStore()
+    await store.getState().init()
+    store.setState({
+      loaded: true,
+      source: 'disk',
+      currentPath: '/tmp/project.json',
+      project: makeProject(),
+      saveStatus: 'saved',
+      savedAt: Date.now(),
+    })
+    store.getState().addMilestone('v0.2', 'v0.2')
+    const a = store.getState().addFeature('core', { label: 'Alpha', ms: 'v0.1' })
+    const b = store.getState().addFeature('core', { label: 'Beta', ms: 'v0.2' })
+    return { store, a, b }
+  }
+
+  it('reassigns orphaned features to the first remaining milestone', async () => {
+    const { store, a } = await seeded()
+    store.getState().deleteMilestone('v0.1')
+    const af = store.getState().project.modules[0].features.find((f) => f.id === a)!
+    expect(af.ms).toBe('v0.2')
+    const milestones = store.getState().project.meta.milestones.map((m) => m.id)
+    expect(milestones).toEqual(['v0.2'])
+  })
+
+  it('resets activeMilestone when its milestone is deleted', async () => {
+    const { store } = await seeded()
+    store.setState({ activeMilestone: 'v0.1' })
+    store.getState().deleteMilestone('v0.1')
+    expect(store.getState().activeMilestone).toBe('all')
+  })
+
+  it('keeps activeMilestone when a different milestone is deleted', async () => {
+    const { store } = await seeded()
+    store.setState({ activeMilestone: 'v0.2' })
+    store.getState().deleteMilestone('v0.1')
+    expect(store.getState().activeMilestone).toBe('v0.2')
+  })
+
+  it('leaves features orphaned when no milestone remains (validator surfaces it)', async () => {
+    const { store, a } = await seeded()
+    store.getState().deleteMilestone('v0.2')
+    store.getState().deleteMilestone('v0.1')
+    const af = store.getState().project.modules[0].features.find((f) => f.id === a)
+    expect(af).toBeTruthy()
+    expect(store.getState().project.meta.milestones).toEqual([])
+  })
+})

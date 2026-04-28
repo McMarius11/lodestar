@@ -782,6 +782,14 @@ export const useProjectStore = create<State & Actions>()(
           }
         }
         if (s.drawerFeatureId === featureId) s.drawerFeatureId = null
+        if (s.cursorFeatureId === featureId) s.cursorFeatureId = null
+        if (s.depEditor && (s.depEditor.fromId === featureId || s.depEditor.toId === featureId)) {
+          s.depEditor = null
+        }
+        delete s.mindmapOverrides[featureId]
+        if (s.project.meta.mindmapPositions) {
+          delete s.project.meta.mindmapPositions[featureId]
+        }
       })
     },
 
@@ -865,6 +873,20 @@ export const useProjectStore = create<State & Actions>()(
         for (const m of s.project.modules) {
           for (const f of m.features) {
             f.deps = f.deps.filter((d) => !removedIds.has(d.id))
+          }
+        }
+        if (s.drawerFeatureId && removedIds.has(s.drawerFeatureId)) s.drawerFeatureId = null
+        if (s.cursorFeatureId && removedIds.has(s.cursorFeatureId)) s.cursorFeatureId = null
+        if (
+          s.depEditor &&
+          (removedIds.has(s.depEditor.fromId) || removedIds.has(s.depEditor.toId))
+        ) {
+          s.depEditor = null
+        }
+        for (const id of removedIds) {
+          delete s.mindmapOverrides[id]
+          if (s.project.meta.mindmapPositions) {
+            delete s.project.meta.mindmapPositions[id]
           }
         }
       })
@@ -978,6 +1000,21 @@ export const useProjectStore = create<State & Actions>()(
     deleteMilestone: (id) => {
       commit((s) => {
         s.project.meta.milestones = s.project.meta.milestones.filter((m) => m.id !== id)
+        // Defensive cascade: callers like MilestoneEditor reassign features
+        // beforehand, but Command-Palette / external edits / undo replay can
+        // reach this action with features still pointing at `id`. Move them
+        // onto the first remaining milestone so they stay visible in the
+        // Roadmap; if no milestone remains, we leave them orphaned and rely
+        // on the Validation panel to flag it.
+        const fallback = s.project.meta.milestones[0]?.id
+        if (fallback) {
+          for (const m of s.project.modules) {
+            for (const f of m.features) {
+              if (f.ms === id) f.ms = fallback
+            }
+          }
+        }
+        if (s.activeMilestone === id) s.activeMilestone = 'all'
       })
     },
 
